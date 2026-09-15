@@ -1,9 +1,62 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Component } from 'react'
 import {
   X, Brain, Search, Loader2, AlertTriangle, ChevronDown, ChevronUp,
   ExternalLink, ShieldCheck, ShieldAlert, Zap, ArrowRight, CheckCircle,
   CircleHelp, Info
 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import DependencyGraph from './DependencyGraph'
+
+class FindingPanelErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("FindingDetailPanel ErrorBoundary caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30" onClick={this.props.onClose} aria-hidden="true" />
+          <div className="fixed right-0 top-0 h-full w-full max-w-[800px] bg-canvas-dark border-l border-hairline-on-dark z-40 p-6 flex flex-col shadow-2xl overflow-y-auto" role="dialog">
+            <div className="flex justify-between items-center mb-6 border-b border-hairline-on-dark pb-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={20} className="text-trading-down" />
+                <h3 className="text-title-md text-on-dark">Analysis View Error</h3>
+              </div>
+              <button onClick={this.props.onClose} className="p-2 text-muted hover:text-on-dark rounded-lg hover:bg-surface-elevated-dark transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 bg-trading-down/10 border border-trading-down/30 rounded-xl mb-4">
+              <p className="text-body-sm text-trading-down font-medium mb-1">
+                An error occurred while rendering the finding details.
+              </p>
+              <p className="text-caption text-muted font-plex">
+                {String(this.state.error?.message || this.state.error)}
+              </p>
+            </div>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="mt-auto h-10 px-6 bg-surface-elevated-dark hover:bg-surface-card-dark text-on-dark text-body-sm font-button rounded-lg border border-hairline-on-dark transition-colors self-start"
+            >
+              Reset View
+            </button>
+          </div>
+        </>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -11,7 +64,7 @@ const severityColor = (sev) => {
   const s = (sev || '').toUpperCase()
   if (s === 'CRITICAL') return 'text-trading-down'
   if (s === 'HIGH')     return 'text-trading-down'
-  if (s === 'MEDIUM')   return 'text-primary'
+  if (s === 'MEDIUM' || s === 'MODERATE') return 'text-primary'
   return 'text-trading-up'
 }
 
@@ -20,6 +73,7 @@ const priorityBadge = (p) => {
     critical: 'bg-trading-down/20 text-trading-down border border-trading-down/30',
     high:     'bg-trading-down/10 text-trading-down border border-trading-down/20',
     medium:   'bg-primary/15 text-primary border border-primary/30',
+    moderate: 'bg-primary/15 text-primary border border-primary/30',
     low:      'bg-trading-up/10 text-trading-up border border-trading-up/30',
   }
   return badges[p?.toLowerCase()] || badges.medium
@@ -27,7 +81,7 @@ const priorityBadge = (p) => {
 
 const confidenceBadge = (level) => {
   if (level === 'high')         return 'text-trading-up'
-  if (level === 'medium')       return 'text-primary'
+  if (level === 'medium' || level === 'moderate') return 'text-primary'
   if (level === 'low')          return 'text-trading-down'
   return 'text-muted'
 }
@@ -91,18 +145,80 @@ function LoadingSteps({ step }) {
   )
 }
 
-function AnalysisResult({ analysis }) {
+function AnalysisResult({ analysis, finding }) {
+  const [isReviewed, setIsReviewed] = useState(finding?.is_reviewed || false)
+  const [reviewing, setReviewing] = useState(false)
   if (!analysis) return null
+
   const { summary, why_it_matters, evidence, impact, confidence, uncertainty,
     recommendation, verification_steps, sources, research_used } = analysis
 
+  const summaryText = typeof summary === 'string' ? summary : (summary ? JSON.stringify(summary, null, 2) : '')
+  const whyText = typeof why_it_matters === 'string' ? why_it_matters : (why_it_matters ? JSON.stringify(why_it_matters, null, 2) : '')
+  const impactText = typeof impact === 'string' ? impact : (impact ? JSON.stringify(impact, null, 2) : '')
+
+  const evidenceList = Array.isArray(evidence) ? evidence : (typeof evidence === 'string' ? [evidence] : [])
+  const verificationList = Array.isArray(verification_steps) ? verification_steps : (typeof verification_steps === 'string' ? [verification_steps] : [])
+  const uncertaintyList = Array.isArray(uncertainty) ? uncertainty : (typeof uncertainty === 'string' ? [uncertainty] : [])
+  const sourcesList = Array.isArray(sources) ? sources : []
+
+  const targetFindingId = finding?.finding_id || finding?.id
+
+  const needsReview = 
+    recommendation?.action === 'investigate' || 
+    confidence?.level === 'low' || 
+    summaryText.toLowerCase().includes('suspicious') ||
+    recommendation?.rationale?.toLowerCase().includes('authorization') ||
+    recommendation?.rationale?.toLowerCase().includes('suspicious')
+
+  const toggleReview = async () => {
+    if (!targetFindingId) return
+    setReviewing(true)
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/findings/${targetFindingId}/review`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        setIsReviewed(!isReviewed)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setReviewing(false)
+    }
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 mt-4">
       {/* Summary */}
-      <div className="p-3 bg-surface-elevated-dark rounded-lg border border-hairline-on-dark">
-        <p className="text-body-sm text-on-dark leading-relaxed">{summary}</p>
+      {needsReview && (
+        <div className="p-3 bg-trading-down/10 border border-trading-down/30 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldAlert size={14} className="text-trading-down" />
+            <span className="text-body-sm font-medium text-trading-down">Suspicious Finding / Authorization Required</span>
+          </div>
+          <button 
+            onClick={toggleReview}
+            disabled={reviewing}
+            className={`px-3 py-1.5 rounded-md text-caption font-button transition-colors flex items-center gap-1 ${
+              isReviewed 
+                ? 'bg-trading-up/20 text-trading-up hover:bg-trading-up/30' 
+                : 'bg-primary hover:bg-primary-active text-ink'
+            }`}
+          >
+            {isReviewed ? <><CheckCircle size={12}/> Reviewed</> : 'Mark Reviewed'}
+          </button>
+        </div>
+      )}
+      
+      <div className="p-4 bg-surface-elevated-dark rounded-lg border border-hairline-on-dark">
+        <div className="text-body-sm text-on-dark leading-relaxed prose prose-invert prose-p:mb-2 prose-a:text-accent-turquoise max-w-none">
+          <ReactMarkdown>
+            {summaryText}
+          </ReactMarkdown>
+        </div>
         {research_used && (
-          <div className="flex items-center gap-1 mt-2">
+          <div className="flex items-center gap-1 mt-3 pt-3 border-t border-hairline-on-dark">
             <Search size={11} className="text-accent-turquoise" />
             <span className="text-caption text-accent-turquoise">External research used</span>
           </div>
@@ -114,7 +230,7 @@ function AnalysisResult({ analysis }) {
         <span className="text-caption text-muted">Confidence</span>
         <div className="flex items-center gap-2">
           <span className={`text-caption font-medium uppercase ${confidenceBadge(confidence?.level)}`}>
-            {confidence?.level}
+            {confidence?.level || 'MEDIUM'}
           </span>
           <span className="text-caption text-muted font-plex">
             {confidence?.score != null ? `${Math.round(confidence.score * 100)}%` : ''}
@@ -123,20 +239,24 @@ function AnalysisResult({ analysis }) {
       </div>
 
       {/* Why it matters */}
-      {why_it_matters && (
+      {whyText && (
         <CollapsibleSection title="Why It Matters" icon={Info}>
-          <p className="text-body-sm text-body leading-relaxed">{why_it_matters}</p>
+          <div className="text-body-sm text-body leading-relaxed prose prose-invert max-w-none">
+            <ReactMarkdown>
+              {whyText}
+            </ReactMarkdown>
+          </div>
         </CollapsibleSection>
       )}
 
       {/* Evidence */}
-      {evidence?.length > 0 && (
+      {evidenceList.length > 0 && (
         <CollapsibleSection title="Evidence" icon={ShieldCheck}>
           <ul className="space-y-1.5">
-            {evidence.map((e, i) => (
+            {evidenceList.map((e, i) => (
               <li key={i} className="flex items-start gap-2 text-body-sm text-body">
                 <CheckCircle size={13} className="text-trading-up mt-0.5 shrink-0" />
-                {e}
+                {typeof e === 'string' ? e : JSON.stringify(e)}
               </li>
             ))}
           </ul>
@@ -144,9 +264,9 @@ function AnalysisResult({ analysis }) {
       )}
 
       {/* Impact */}
-      {impact && (
+      {impactText && (
         <CollapsibleSection title="Impact" icon={ShieldAlert} defaultOpen={false}>
-          <p className="text-body-sm text-body leading-relaxed">{impact}</p>
+          <p className="text-body-sm text-body leading-relaxed">{impactText}</p>
         </CollapsibleSection>
       )}
 
@@ -156,7 +276,7 @@ function AnalysisResult({ analysis }) {
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`text-caption px-2 py-0.5 rounded-pill uppercase font-medium ${priorityBadge(recommendation.priority)}`}>
-                {recommendation.priority}
+                {recommendation.priority || 'medium'}
               </span>
               <span className="text-body-sm font-medium text-on-dark capitalize">{recommendation.action}</span>
               {recommendation.target_version && (
@@ -169,13 +289,13 @@ function AnalysisResult({ analysis }) {
       )}
 
       {/* Verification Steps */}
-      {verification_steps?.length > 0 && (
+      {verificationList.length > 0 && (
         <CollapsibleSection title="Verification Steps" icon={CheckCircle} defaultOpen={false}>
           <ol className="space-y-1.5">
-            {verification_steps.map((step, i) => (
+            {verificationList.map((step, i) => (
               <li key={i} className="flex items-start gap-2 text-body-sm text-body">
                 <span className="text-primary font-plex shrink-0 w-4">{i + 1}.</span>
-                {step}
+                {typeof step === 'string' ? step : JSON.stringify(step)}
               </li>
             ))}
           </ol>
@@ -183,13 +303,13 @@ function AnalysisResult({ analysis }) {
       )}
 
       {/* Uncertainty */}
-      {uncertainty?.length > 0 && (
+      {uncertaintyList.length > 0 && (
         <CollapsibleSection title="Uncertainty" icon={CircleHelp} defaultOpen={false}>
           <ul className="space-y-1.5">
-            {uncertainty.map((u, i) => (
+            {uncertaintyList.map((u, i) => (
               <li key={i} className="flex items-start gap-2 text-body-sm text-muted">
                 <AlertTriangle size={12} className="text-primary mt-0.5 shrink-0" />
-                {u}
+                {typeof u === 'string' ? u : JSON.stringify(u)}
               </li>
             ))}
           </ul>
@@ -197,10 +317,10 @@ function AnalysisResult({ analysis }) {
       )}
 
       {/* Sources */}
-      {sources?.length > 0 && (
-        <CollapsibleSection title={`Sources (${sources.length})`} icon={Search} defaultOpen={false}>
+      {sourcesList.length > 0 && (
+        <CollapsibleSection title={`Real-time Tavily Search & OSV Sources (${sourcesList.length})`} icon={Search} defaultOpen={true}>
           <ul className="space-y-2">
-            {sources.map((s, i) => (
+            {sourcesList.map((s, i) => (
               <li key={i} className="flex items-start gap-2">
                 <ArrowRight size={11} className="text-muted mt-0.5 shrink-0" />
                 <div className="min-w-0">
@@ -236,14 +356,14 @@ const QUICK_QUESTIONS = [
   { label: '🔍 Research this vuln', type: 'vulnerability', q: 'Research this vulnerability and provide all available advisory details.' },
 ]
 
-export default function FindingDetailPanel({ finding, onClose }) {
+function FindingDetailPanelInner({ finding, dependencies, onClose }) {
+  const [activeTab, setActiveTab] = useState('overview')
   const [analysis, setAnalysis] = useState(null)
   const [loading, setLoading] = useState(false)
   const [loadingStep, setLoadingStep] = useState(0)
   const [error, setError] = useState(null)
   const stepInterval = useRef(null)
 
-  // Auto-scroll panel into view
   useEffect(() => {
     if (finding) {
       setAnalysis(null)
@@ -251,7 +371,6 @@ export default function FindingDetailPanel({ finding, onClose }) {
     }
   }, [finding?.finding_id])
 
-  // Advance loading step dots animation
   useEffect(() => {
     if (loading) {
       stepInterval.current = setInterval(() => setLoadingStep(s => s + 1), 1200)
@@ -263,31 +382,53 @@ export default function FindingDetailPanel({ finding, onClose }) {
   }, [loading])
 
   const runAnalysis = async (questionType = 'vulnerability', question = null) => {
-    if (!finding?.finding_id) return
-    setLoading(true)
-    setError(null)
-    setAnalysis(null)
+    let numericFindingId = finding?.finding_id;
+    if (typeof numericFindingId !== 'number' && typeof finding?.id === 'number') {
+      numericFindingId = finding.id;
+    }
+    if (!numericFindingId && finding?.id && !isNaN(Number(finding.id))) {
+      numericFindingId = Number(finding.id);
+    }
+
+    if (!numericFindingId || typeof numericFindingId !== 'number') {
+      setError('Cannot analyze finding: missing valid numeric finding ID.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setAnalysis(null);
 
     try {
       const res = await fetch('http://127.0.0.1:8000/api/intelligence/analyze-finding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          finding_id: finding.finding_id,
+          finding_id: numericFindingId,
           question,
           question_type: questionType,
         }),
-      })
+      });
+
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || `Server error ${res.status}`)
+        const err = await res.json().catch(() => ({}));
+        let msg = `Server error ${res.status}`;
+        if (typeof err.detail === 'string') {
+          msg = err.detail;
+        } else if (Array.isArray(err.detail)) {
+          msg = err.detail.map(d => (d.msg ? `${d.loc ? d.loc.join('.'): ''}: ${d.msg}` : JSON.stringify(d))).join('; ');
+        } else if (err.detail) {
+          msg = JSON.stringify(err.detail);
+        }
+        throw new Error(msg);
       }
-      const data = await res.json()
-      setAnalysis(data)
+      const data = await res.json();
+      setAnalysis(data);
     } catch (e) {
-      setError(e.message || 'Failed to reach AI service. Make sure the backend is running.')
+      const displayMsg = typeof e?.message === 'string' ? e.message : 'Failed to reach AI service.';
+      setError(displayMsg);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -297,59 +438,75 @@ export default function FindingDetailPanel({ finding, onClose }) {
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/40 z-30"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30" onClick={onClose} aria-hidden="true" />
 
-      {/* Panel */}
-      <div
-        className="fixed right-0 top-0 h-full w-full max-w-[480px] bg-canvas-dark border-l border-hairline-on-dark z-40 flex flex-col shadow-2xl"
-        role="dialog"
-        aria-label="Finding Details"
-      >
+      <div className="fixed right-0 top-0 h-full w-full max-w-[800px] bg-canvas-dark border-l border-hairline-on-dark z-40 flex flex-col shadow-2xl overflow-hidden" role="dialog">
+        
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-hairline-on-dark shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-surface-elevated-dark flex items-center justify-center text-caption font-plex text-primary shrink-0">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-hairline-on-dark shrink-0 bg-surface-dark">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-surface-elevated-dark flex items-center justify-center text-body-sm font-plex text-primary shrink-0">
               npm
             </div>
-            <div className="min-w-0">
-              <p className="text-title-sm text-on-dark truncate">{finding.id}</p>
-              <p className="text-caption text-muted">{finding.direct ? 'Direct dependency' : 'Transitive dependency'}</p>
+            <div>
+              <h2 className="text-title-md text-on-dark truncate max-w-[500px]">
+                {finding.package_name || pkgName}
+              </h2>
+              <div className="flex items-center gap-3 mt-1">
+                <span className="font-plex text-body-sm text-primary">v{finding.version || pkgVersion}</span>
+                <span className="text-muted text-xs">•</span>
+                <span className={`text-caption font-medium uppercase ${severityColor(finding.risk)}`}>
+                  {finding.risk}
+                </span>
+                <span className="text-muted text-xs">•</span>
+                <span className="text-caption text-muted">{finding.direct ? 'Direct dependency' : 'Transitive dependency'}</span>
+                <span className="text-muted text-xs">•</span>
+                <span className="text-caption text-muted font-plex">#{finding.finding_id}</span>
+              </div>
             </div>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-on-dark transition-colors p-1 rounded shrink-0">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-elevated-dark text-muted hover:text-on-dark transition-colors shrink-0">
             <X size={20} />
           </button>
         </div>
 
-        {/* Meta strip */}
-        <div className="flex items-center gap-3 px-5 py-3 bg-surface-card-dark border-b border-hairline-on-dark shrink-0">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-caption text-muted">Severity</span>
-            <span className={`text-body-sm font-medium uppercase ${severityColor(finding.risk)}`}>
-              {finding.risk}
-            </span>
-          </div>
-          <div className="w-px h-8 bg-hairline-on-dark" />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-caption text-muted">Topology</span>
-            <span className="text-body-sm text-on-dark">{finding.direct ? 'Direct' : 'Transitive'}</span>
-          </div>
-          <div className="w-px h-8 bg-hairline-on-dark" />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-caption text-muted">Finding ID</span>
-            <span className="text-body-sm font-plex text-on-dark">#{finding.finding_id}</span>
-          </div>
+        {/* Tabs */}
+        <div className="flex px-6 border-b border-hairline-on-dark bg-surface-dark shrink-0">
+          <button
+            className={`px-4 py-3 text-body-sm font-medium border-b-2 transition-colors ${activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-on-dark'}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            Overview
+          </button>
+          <button
+            className={`px-4 py-3 text-body-sm font-medium border-b-2 transition-colors ${activeTab === 'tree' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-on-dark'}`}
+            onClick={() => setActiveTab('tree')}
+          >
+            Node Tree
+          </button>
         </div>
 
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar bg-canvas-dark">
+          {activeTab === 'tree' && (
+            <div className="h-full min-h-[500px] flex flex-col">
+              <h3 className="text-title-sm text-on-dark mb-4">Dependency Node Tree</h3>
+              <p className="text-body-sm text-muted mb-4">Visual representation of how this dependency is connected in your project.</p>
+              <div className="flex-1 bg-surface-dark border border-hairline-on-dark rounded-xl overflow-hidden relative">
+                {dependencies ? (
+                  <DependencyGraph dependencies={dependencies} />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <p className="text-muted">No dependency graph available.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
-          {/* Quick Questions */}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Quick Questions */}
           {!loading && !analysis && (
             <div>
               <p className="text-caption text-muted mb-2 uppercase tracking-wider">Quick Analysis</p>
@@ -376,7 +533,7 @@ export default function FindingDetailPanel({ finding, onClose }) {
                 <AlertTriangle size={16} className="text-trading-down mt-0.5 shrink-0" />
                 <div>
                   <p className="text-body-sm font-medium text-trading-down">Analysis Failed</p>
-                  <p className="text-body-sm text-muted mt-1">{error}</p>
+                  <p className="text-body-sm text-muted mt-1">{String(error)}</p>
                 </div>
               </div>
             </div>
@@ -389,7 +546,7 @@ export default function FindingDetailPanel({ finding, onClose }) {
                 <Brain size={14} className="text-primary" />
                 <p className="text-caption text-muted uppercase tracking-wider">AI Security Assessment</p>
               </div>
-              <AnalysisResult analysis={analysis} />
+              <AnalysisResult analysis={analysis} finding={finding} />
               {/* Ask another question */}
               <div>
                 <p className="text-caption text-muted mb-2 uppercase tracking-wider">Ask Another</p>
@@ -406,10 +563,12 @@ export default function FindingDetailPanel({ finding, onClose }) {
               </div>
             </>
           )}
+            </div>
+          )}
         </div>
 
         {/* Footer CTA */}
-        {!loading && (
+      {!loading && activeTab === 'overview' && (
           <div className="px-5 py-4 border-t border-hairline-on-dark shrink-0">
             <button
               onClick={() => runAnalysis('vulnerability')}
@@ -423,5 +582,13 @@ export default function FindingDetailPanel({ finding, onClose }) {
         )}
       </div>
     </>
+  )
+}
+
+export default function FindingDetailPanel(props) {
+  return (
+    <FindingPanelErrorBoundary onClose={props.onClose}>
+      <FindingDetailPanelInner {...props} />
+    </FindingPanelErrorBoundary>
   )
 }

@@ -6,6 +6,8 @@ import Dashboard from "./pages/Dashboard";
 import Investigator from "./pages/Investigator";
 import TrustLedger from "./pages/TrustLedger";
 
+import FindingDetailPage from "./pages/FindingDetailPage";
+
 function App() {
   const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '')
 
@@ -22,9 +24,9 @@ function App() {
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2 cursor-pointer">
               <div className="w-8 h-8 bg-primary rounded flex items-center justify-center font-bold text-ink text-xl font-plex leading-none">
-                S
+                A
               </div>
-              <span className="font-bold text-lg text-primary tracking-tight">SUPPLYSHIELD</span>
+              <span className="font-bold text-lg text-primary tracking-tight">ATOMCHAIN</span>
             </Link>
             {githubToken && (
               <div className="hidden md:flex items-center gap-6 text-nav-link text-on-dark">
@@ -76,6 +78,10 @@ function App() {
               element={githubToken ? <Dashboard githubToken={githubToken} /> : <Navigate to="/" />} 
             />
             <Route 
+              path="/finding/:findingId" 
+              element={githubToken ? <FindingDetailPage /> : <Navigate to="/" />} 
+            />
+            <Route 
               path="/investigator" 
               element={githubToken ? <Investigator /> : <Navigate to="/" />} 
             />
@@ -97,7 +103,7 @@ function App() {
           <div className="max-w-[1280px] mx-auto px-6">
             <div className="border-t border-hairline-on-light pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
               <p className="text-caption text-muted-strong">
-                © 2026 Sustainverse. Local Open Source Edition.
+                © 2026 AtomChain. Local Open Source Edition.
               </p>
             </div>
           </div>

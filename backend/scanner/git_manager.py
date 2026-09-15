@@ -8,51 +8,81 @@ class GitManager:
     def __init__(self):
         pass
 
-    def clone_repo(self, repo_url: str, branch: str = None, github_token: str = None) -> str:
+    @staticmethod
+    def clear_all_temp_repos():
+        """Clears any orphaned temporary repository directories."""
+        temp_base = tempfile.gettempdir()
+        for item in os.listdir(temp_base):
+            if item.startswith("sustainverse_"):
+                path = os.path.join(temp_base, item)
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+
+    def fetch_repo_tarball(self, repo_url: str, branch: str = None, github_token: str = None) -> str:
         """
-        Clones a GitHub repository shallowly (--depth 1) into a temporary directory.
+        Downloads a GitHub repository as a tarball and extracts it into a temporary directory.
         Returns the path to the temporary directory.
         """
         temp_dir = tempfile.mkdtemp(prefix="sustainverse_")
-
-        # Inject token into URL for private repos
+        
         parsed = urllib.parse.urlparse(repo_url)
         if not parsed.scheme:
             repo_url = f"https://{repo_url}"
             parsed = urllib.parse.urlparse(repo_url)
 
-        if github_token and parsed.hostname in ("github.com",):
-            tokened = parsed._replace(
-                netloc=f"x-access-token:{github_token}@{parsed.hostname}"
-            )
-            repo_url = urllib.parse.urlunparse(tokened)
+        path_parts = parsed.path.strip("/").split("/")
+        if len(path_parts) < 2:
+            raise Exception("Invalid GitHub repository URL")
+        owner, repo = path_parts[0], path_parts[1].replace(".git", "")
 
-        cmd = ["git", "clone", "--depth", "1"]
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/tarball"
         if branch:
-            cmd.extend(["--branch", branch])
+            api_url += f"/{branch}"
 
-        cmd.append(repo_url)
-        cmd.append(temp_dir)
+        import urllib.request
+        import tarfile
 
-        env = os.environ.copy()
-        env["GIT_TERMINAL_PROMPT"] = "0"
+        req = urllib.request.Request(api_url)
+        if github_token:
+            req.add_header("Authorization", f"token {github_token}")
+        req.add_header("User-Agent", "AtomChain-Scanner")
+        req.add_header("Accept", "application/vnd.github.v3+json")
 
+        tar_path = os.path.join(temp_dir, "repo.tar.gz")
         try:
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=120,   # 2-minute cap — prevents indefinite hang on network issues
-            )
+            with urllib.request.urlopen(req, timeout=30) as response, open(tar_path, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+            
+            with tarfile.open(tar_path, "r:gz") as tar:
+                # Security: prevent path traversal in tar
+                def is_within_directory(directory, target):
+                    abs_directory = os.path.abspath(directory)
+                    abs_target = os.path.abspath(target)
+                    prefix = os.path.commonprefix([abs_directory, abs_target])
+                    return prefix == abs_directory
+                
+                def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+                    for member in tar.getmembers():
+                        member_path = os.path.join(path, member.name)
+                        if not is_within_directory(path, member_path):
+                            raise Exception("Attempted Path Traversal in Tar File")
+                    tar.extractall(path, members, numeric_owner=numeric_owner)
+
+                safe_extract(tar, temp_dir)
+            
+            os.remove(tar_path)
+            
+            # The tarball extracts into a subfolder like `owner-repo-commitHash/`
+            extracted_items = os.listdir(temp_dir)
+            if len(extracted_items) == 1:
+                inner_dir = os.path.join(temp_dir, extracted_items[0])
+                if os.path.isdir(inner_dir):
+                    return inner_dir
+                    
             return temp_dir
-        except subprocess.TimeoutExpired:
+        except Exception as e:
             shutil.rmtree(temp_dir, ignore_errors=True)
-            raise Exception("Repository clone timed out after 120 seconds. Check your internet connection or try again.")
-        except subprocess.CalledProcessError as e:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            raise Exception(f"Failed to clone repository: {e.stderr}")
+            raise Exception(f"Failed to fetch repository tarball: {e}")
 
     def cleanup(self, path: str):
         """Removes the temporary directory."""

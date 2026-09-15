@@ -1,16 +1,169 @@
-import { useState, useEffect } from 'react'
-import { Search, ShieldCheck, Activity, Globe, Zap, ArrowRight, ShieldAlert } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Search, ShieldCheck, Activity, Globe, Zap, ArrowRight, ShieldAlert, Folder, Archive } from 'lucide-react'
 import FindingDetailPanel from '../components/FindingDetailPanel'
 import AIScanSummary from '../components/AIScanSummary'
 
 export default function Dashboard({ githubToken }) {
-  const [repoUrl, setRepoUrl] = useState('')
-  const [scanResult, setScanResult] = useState(null)
+  const navigate = useNavigate()
+  const [repoUrl, setRepoUrl] = useState(() => localStorage.getItem('cached_repo_url') || '')
+  const [localPath, setLocalPath] = useState(() => localStorage.getItem('cached_local_path') || '')
+  const [scanResult, setScanResult] = useState(() => {
+    const saved = localStorage.getItem('cached_scan_result')
+    if (saved) {
+      try { return JSON.parse(saved) } catch (e) {}
+    }
+    return null
+  })
   const [isScanning, setIsScanning] = useState(false)
   const [pollingId, setPollingId] = useState(null)
   const [selectedFinding, setSelectedFinding] = useState(null)
   const [scanProgress, setScanProgress] = useState(0)
   const [scanStage, setScanStage] = useState('Initializing scan...')
+  const folderInputRef = useRef(null)
+  const zipInputRef = useRef(null)
+
+  useEffect(() => {
+    if (scanResult) {
+      localStorage.setItem('cached_scan_result', JSON.stringify(scanResult))
+    }
+  }, [scanResult])
+
+  useEffect(() => {
+    if (repoUrl) localStorage.setItem('cached_repo_url', repoUrl)
+  }, [repoUrl])
+
+  useEffect(() => {
+    if (localPath) localStorage.setItem('cached_local_path', localPath)
+  }, [localPath])
+
+  useEffect(() => {
+    const lastScanId = localStorage.getItem('last_scan_id')
+    if (!scanResult && lastScanId) {
+      fetch(`http://127.0.0.1:8000/api/scan/${lastScanId}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.status === 'COMPLETED') {
+            setScanResult(data)
+            localStorage.setItem('cached_scan_result', JSON.stringify(data))
+          }
+        })
+        .catch(console.error)
+    }
+  }, [])
+
+  const handleFolderClick = async () => {
+    if (window.electronAPI?.selectDirectory) {
+      const dir = await window.electronAPI.selectDirectory();
+      if (dir) {
+        setLocalPath(dir);
+        return;
+      }
+    }
+    if (folderInputRef.current) {
+      folderInputRef.current.click();
+    }
+  }
+
+  const handleFolderChange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    let folderName = 'Local Project';
+    const firstFile = files[0];
+    if (firstFile.webkitRelativePath) {
+      folderName = firstFile.webkitRelativePath.split('/')[0];
+    } else if (firstFile.name) {
+      folderName = firstFile.name;
+    }
+    setLocalPath(folderName);
+
+    // Look for package.json and package-lock.json in selected folder files
+    const pkgFile = files.find(f => f.name.toLowerCase() === 'package.json');
+    const lockFile = files.find(f => f.name.toLowerCase() === 'package-lock.json');
+
+    if (!pkgFile && !lockFile) {
+      setScanResult({ error: `No package.json or package-lock.json found in selected folder "${folderName}".` });
+      return;
+    }
+
+    let package_json = null;
+    let package_lock_json = null;
+
+    try {
+      if (pkgFile) {
+        const text = await pkgFile.text();
+        package_json = JSON.parse(text);
+      }
+      if (lockFile) {
+        const text = await lockFile.text();
+        package_lock_json = JSON.parse(text);
+      }
+    } catch (parseErr) {
+      setScanResult({ error: `Failed to parse manifest JSON files in "${folderName}": ${parseErr.message}` });
+      return;
+    }
+
+    // Initiate scan with uploaded manifests
+    setIsScanning(true);
+    setScanResult(null);
+    setSelectedFinding(null);
+    setScanProgress(15);
+    setScanStage(`Extracted manifest files from "${folderName}". Initiating scan...`);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/scan/manifests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ package_json, package_lock_json, project_name: folderName })
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to initiate scan from manifest files.');
+      }
+      const data = await res.json();
+      setPollingId(data.scan_id);
+    } catch (err) {
+      console.error(err);
+      setScanResult({ error: err.message || 'Failed to reach scan backend.' });
+      setIsScanning(false);
+      setScanProgress(0);
+    }
+  }
+
+
+  const handleZipChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.name.endsWith('.zip')) return;
+
+    setLocalPath(file.name);
+    setIsScanning(true);
+    setScanResult(null);
+    setSelectedFinding(null);
+    setScanProgress(15);
+    setScanStage(`Uploading and extracting "${file.name}"...`);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/scan/zip', {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to initiate zip scan.');
+      }
+      const data = await res.json();
+      setPollingId(data.scan_id);
+    } catch (err) {
+      console.error(err);
+      setScanResult({ error: err.message || 'Failed to reach scan backend.' });
+      setIsScanning(false);
+      setScanProgress(0);
+    }
+  }
 
   const handleScan = async () => {
     setIsScanning(true)
@@ -75,6 +228,32 @@ export default function Dashboard({ githubToken }) {
     } catch (e) {
       console.error(e)
       setScanResult({ error: e.message || 'Failed to reach backend. Make sure Uvicorn is running on port 8000.' })
+      setIsScanning(false)
+      setScanProgress(0)
+    }
+  }
+
+  const handleLocalScan = async () => {
+    setIsScanning(true)
+    setScanResult(null)
+    setSelectedFinding(null)
+    setScanProgress(25)
+    setScanStage('Parsing dependencies and lockfiles from local directory...')
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/scan/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ local_path: localPath })
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to initiate local scan. Make sure the path is correct and contains a package.json file.');
+      }
+      const data = await res.json()
+      setPollingId(data.scan_id)
+    } catch (e) {
+      console.error(e)
+      setScanResult({ error: e.message || 'Failed to reach backend.' })
       setIsScanning(false)
       setScanProgress(0)
     }
@@ -185,6 +364,56 @@ export default function Dashboard({ githubToken }) {
               )}
             </button>
           </div>
+
+          {/* Local Scan Option */}
+          <div className="max-w-2xl mx-auto mt-4 pt-4 border-t border-hairline-on-dark/40 flex items-center bg-surface-dark rounded-lg p-2 border shadow-inner">
+            <input 
+              type="file"
+              ref={folderInputRef}
+              webkitdirectory=""
+              directory=""
+              className="hidden"
+              onChange={handleFolderChange}
+            />
+            <input 
+              type="file"
+              ref={zipInputRef}
+              accept=".zip"
+              className="hidden"
+              onChange={handleZipChange}
+            />
+            <button 
+              className="pl-3 pr-2 text-muted-strong hover:text-primary transition-colors cursor-pointer"
+              onClick={handleFolderClick}
+              title="Select Folder"
+              type="button"
+            >
+              <Folder size={18} />
+            </button>
+            <button 
+              className="pr-2 text-muted-strong hover:text-primary transition-colors cursor-pointer"
+              onClick={() => zipInputRef.current?.click()}
+              title="Upload ZIP Archive"
+              type="button"
+            >
+              <Archive size={18} />
+            </button>
+            <input 
+              type="text" 
+              value={localPath}
+              onChange={(e) => setLocalPath(e.target.value)}
+              placeholder="Or scan local directory path / .zip file"
+              className="flex-1 bg-transparent text-body-sm text-on-dark placeholder-muted-strong outline-none px-2 py-1.5"
+              onKeyDown={(e) => e.key === 'Enter' && localPath && handleLocalScan()}
+            />
+            <button 
+              onClick={handleLocalScan}
+              disabled={isScanning || !localPath}
+              className="ml-2 h-8 px-6 rounded-md font-button text-xs text-on-dark bg-surface-elevated-dark hover:bg-surface-card-dark disabled:bg-surface-dark disabled:text-muted border border-hairline-on-dark transition-colors whitespace-nowrap"
+            >
+              Scan Local
+            </button>
+          </div>
         </div>
       </section>
 
@@ -286,7 +515,7 @@ export default function Dashboard({ githubToken }) {
                   </div>
                   <div className="bg-surface-elevated-dark px-4 py-2 rounded-lg mt-auto w-full flex justify-between items-center">
                     <span className="text-body-sm text-muted">Overall Risk Level</span>
-                    <span className={`text-title-sm uppercase tracking-widest ${scanResult.level === 'LOW' ? 'text-trading-up' : scanResult.level === 'MEDIUM' ? 'text-primary' : 'text-trading-down'}`}>
+                    <span className={`text-title-sm uppercase tracking-widest ${scanResult.level === 'LOW' ? 'text-trading-up' : (scanResult.level === 'MEDIUM' || scanResult.level === 'MODERATE') ? 'text-primary' : 'text-trading-down'}`}>
                       {scanResult.level}
                     </span>
                   </div>
@@ -321,7 +550,7 @@ export default function Dashboard({ githubToken }) {
                     scanResult.dependencies.map((dep, i) => (
                       <div
                         key={i}
-                        onClick={() => setSelectedFinding(dep)}
+                        onClick={() => navigate(`/finding/${dep.finding_id || dep.id}`, { state: { finding: dep, dependencies: scanResult?.dependencies } })}
                         className="grid grid-cols-12 gap-4 items-center py-3 px-2 rounded-lg hover:bg-surface-elevated-dark transition-colors cursor-pointer group border-b border-hairline-on-dark last:border-0"
                       >
                         <div className="col-span-5 flex items-center gap-3">
@@ -331,8 +560,8 @@ export default function Dashboard({ githubToken }) {
                         <div className="col-span-3 text-right font-plex text-number-md">
                           {['CRITICAL', 'HIGH'].includes(dep.risk) ? (
                             <span className="text-trading-down">{dep.risk}</span>
-                          ) : dep.risk === 'MEDIUM' ? (
-                            <span className="text-primary">{dep.risk}</span>
+                          ) : (dep.risk === 'MEDIUM' || dep.risk === 'MODERATE') ? (
+                            <span className="text-primary font-medium">{dep.risk}</span>
                           ) : (
                             <span className="text-trading-up">{dep.risk}</span>
                           )}
@@ -360,11 +589,12 @@ export default function Dashboard({ githubToken }) {
         </section>
       )}
 
-      {/* Finding Detail Panel (slide-in on row click) */}
+      {/* Dynamic Details Panel Overlay */}
       {selectedFinding && (
-        <FindingDetailPanel
+        <FindingDetailPanel 
           finding={selectedFinding}
-          onClose={() => setSelectedFinding(null)}
+          dependencies={scanResult?.dependencies}
+          onClose={() => setSelectedFinding(null)} 
         />
       )}
     </>

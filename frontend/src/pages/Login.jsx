@@ -46,7 +46,7 @@ export default function Login({ setToken }) {
         </div>
 
         <h1 className="text-display-sm text-on-dark mb-2">
-          Sign in to Sustainverse
+          Sign in to AtomChain
         </h1>
         <p className="text-body-md text-muted mb-8">
           Authenticate with GitHub to securely analyze your private
@@ -70,7 +70,7 @@ export default function Login({ setToken }) {
         <div className="mt-6 flex items-start gap-3 p-4 bg-surface-elevated-dark rounded-lg text-left">
           <ShieldAlert className="text-muted shrink-0 mt-0.5" size={18} />
           <p className="text-caption text-muted">
-            Sustainverse operates entirely locally on your machine. Your OAuth
+            AtomChain operates entirely locally on your machine. Your OAuth
             token is stored securely in your browser and is never sent to any
             external servers other than the official GitHub API.
           </p>

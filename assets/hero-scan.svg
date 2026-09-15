@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" role="img" aria-label="AtomChain dependency radar scan">
+  <title>AtomChain dependency radar scan</title>
+  <defs>
+    <radialGradient id="beam" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fcd535" stop-opacity="0.5"/>
+      <stop offset="55%" stop-color="#fcd535" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#fcd535" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#181a20"/>
+      <stop offset="100%" stop-color="#0b0e11"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="180" cy="180" r="172" fill="url(#bg)" stroke="#2b3139" stroke-width="2"/>
+
+  <g fill="none" stroke="#2b3139" stroke-opacity="0.85" stroke-width="1.5">
+    <circle cx="180" cy="180" r="46"/>
+    <circle cx="180" cy="180" r="92"/>
+    <circle cx="180" cy="180" r="138"/>
+    <line x1="8" y1="180" x2="352" y2="180"/>
+    <line x1="180" y1="8" x2="180" y2="352"/>
+  </g>
+
+  <g>
+    <animateTransform attributeName="transform" type="rotate" from="0 180 180" to="360 180 180" dur="3.5s" repeatCount="indefinite"/>
+    <path d="M180,180 L180,42 A138,138 0 0 1 318,180 Z" fill="url(#beam)"/>
+    <path d="M180,180 L180,42 A138,138 0 0 1 318,180 Z" fill="none" stroke="#fcd535" stroke-width="2" stroke-opacity="0.95"/>
+  </g>
+
+  <g>
+    <circle cx="120" cy="240" r="4" fill="#f6465d">
+      <animate attributeName="opacity" values="1;0.25;1" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="120" cy="240" r="4" fill="none" stroke="#f6465d" stroke-width="1.5">
+      <animate attributeName="r" values="4;18" dur="2.4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;0" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <g>
+    <circle cx="236" cy="96" r="4" fill="#fcd535">
+      <animate attributeName="opacity" values="0.2;1;0.2" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="236" cy="96" r="4" fill="none" stroke="#fcd535" stroke-width="1.5">
+      <animate attributeName="r" values="4;16" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;0" dur="2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <g>
+    <circle cx="252" cy="232" r="3" fill="#0ecb81">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="252" cy="232" r="3" fill="none" stroke="#0ecb81" stroke-width="1.5">
+      <animate attributeName="r" values="3;14" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;0" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <circle cx="180" cy="180" r="9" fill="#fcd535"/>
+  <circle cx="180" cy="180" r="14" fill="none" stroke="#fcd535" stroke-opacity="0.5" stroke-width="2">
+    <animate attributeName="r" values="14;24" dur="1.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+</svg>

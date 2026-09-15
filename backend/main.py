@@ -2,7 +2,7 @@ import os
 import sys
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException
+from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -22,8 +22,17 @@ from database import get_db, Scan, Finding, TrustRecord
 from scanner.git_manager import GitManager
 from scanner.github_client import GitHubAPIClient
 from parsers.npm_parser import NpmParser
+from parsers.python_parser import PythonParser
+from scanner.zip_manager import ZipManager
 from intelligence.osv_client import OSVClient
 from dependency.graph_builder import DependencyGraph
+
+# Startup cleanup of old cloned repos
+try:
+    GitManager.clear_all_temp_repos()
+except Exception as e:
+    print(f"Warning: Failed to clear old temp repos: {e}")
+
 from risk.engine import RiskEngine
 from auth import router as auth_router
 
@@ -59,6 +68,13 @@ class GitHubScanRequest(BaseModel):
     repo_url: str
     github_token: Optional[str] = None
     branch: Optional[str] = None
+class LocalScanRequest(BaseModel):
+    local_path: str
+
+class ManifestScanRequest(BaseModel):
+    package_json: Optional[dict] = None
+    package_lock_json: Optional[dict] = None
+    project_name: Optional[str] = "Uploaded Project"
 
 class ScanResponse(BaseModel):
     scan_id: int
@@ -85,7 +101,7 @@ class ScanDetail(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "Sustainverse Backend is running"}
+    return {"status": "AtomChain Backend is running"}
 
 @app.post("/api/scan/github", response_model=ScanResponse)
 def scan_github(req: GitHubScanRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
@@ -98,6 +114,53 @@ def scan_github(req: GitHubScanRequest, background_tasks: BackgroundTasks, db: S
         process_github_scan, new_scan.id, req.repo_url, req.github_token, req.branch
     )
     return {"scan_id": new_scan.id, "status": "PENDING", "message": "Scan initiated"}
+
+@app.post("/api/scan/local", response_model=ScanResponse)
+def scan_local(req: LocalScanRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    if not os.path.exists(req.local_path) or not os.path.isdir(req.local_path):
+        raise HTTPException(status_code=400, detail="Invalid local directory path")
+    
+    new_scan = Scan(repository_url=f"local://{req.local_path}", status="PENDING")
+    db.add(new_scan)
+    db.commit()
+    db.refresh(new_scan)
+
+    background_tasks.add_task(
+        process_local_scan, new_scan.id, req.local_path
+    )
+    return {"scan_id": new_scan.id, "status": "PENDING", "message": "Local scan initiated"}
+
+@app.post("/api/scan/manifests", response_model=ScanResponse)
+def scan_manifests(req: ManifestScanRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    if not req.package_json and not req.package_lock_json:
+        raise HTTPException(status_code=400, detail="No package.json or package-lock.json provided in folder.")
+    
+    new_scan = Scan(repository_url=f"folder://{req.project_name}", status="PENDING")
+    db.add(new_scan)
+    db.commit()
+    db.refresh(new_scan)
+
+    background_tasks.add_task(
+        process_manifest_scan, new_scan.id, req.package_json, req.package_lock_json
+    )
+    return {"scan_id": new_scan.id, "status": "PENDING", "message": "Manifest scan initiated"}
+
+
+@app.post("/api/scan/zip", response_model=ScanResponse)
+async def scan_zip(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Must be a .zip file")
+    
+    zip_bytes = await file.read()
+    new_scan = Scan(repository_url=f"zip://{file.filename}", status="PENDING")
+    db.add(new_scan)
+    db.commit()
+    db.refresh(new_scan)
+
+    background_tasks.add_task(
+        process_zip_scan, new_scan.id, zip_bytes
+    )
+    return {"scan_id": new_scan.id, "status": "PENDING", "message": "ZIP scan initiated"}
 
 @app.get("/api/scan/{scan_id}", response_model=ScanDetail)
 def get_scan_status(scan_id: int, db: Session = Depends(get_db)):
@@ -143,6 +206,47 @@ def get_scan_status(scan_id: int, db: Session = Depends(get_db)):
     return ScanDetail(scan_id=scan_id, status=scan.status, message=msg, error_message=err_msg)
 
 
+@app.get("/api/findings/{finding_id}")
+def get_finding_detail(finding_id: int, db: Session = Depends(get_db)):
+    finding = db.query(Finding).filter(Finding.id == finding_id).first()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    
+    scan = db.query(Scan).filter(Scan.id == finding.scan_id).first()
+    scan_deps = []
+    if scan:
+        all_findings = db.query(Finding).filter(Finding.scan_id == scan.id).all()
+        scan_deps = [
+            {
+                "id": f"{f.package_name}@{f.version}",
+                "finding_id": f.id,
+                "risk": f.severity,
+                "direct": f.finding_type == "DIRECT_VULNERABILITY",
+            }
+            for f in all_findings
+        ]
+
+    return {
+        "finding_id": finding.id,
+        "id": f"{finding.package_name}@{finding.version}",
+        "scan_id": finding.scan_id,
+        "package_name": finding.package_name,
+        "version": finding.version,
+        "vulnerability_id": finding.vulnerability_id,
+        "cve": finding.cve,
+        "risk": finding.severity,
+        "severity": finding.severity,
+        "risk_score": finding.risk_score,
+        "confidence": finding.confidence,
+        "finding_type": finding.finding_type,
+        "direct": finding.finding_type == "DIRECT_VULNERABILITY",
+        "summary": finding.summary,
+        "insight": finding.insight,
+        "is_reviewed": bool(finding.is_reviewed),
+        "decision": finding.decision,
+        "dependencies": scan_deps
+    }
+
 @app.get("/api/ledger")
 def get_ledger(db: Session = Depends(get_db)):
     records = db.query(TrustRecord).order_by(TrustRecord.id.desc()).all()
@@ -177,6 +281,19 @@ def review_finding(finding_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "is_reviewed": bool(finding.is_reviewed)}
 
+
+class DecisionRequest(BaseModel):
+    decision: str
+
+@app.post("/api/findings/{finding_id}/decision")
+def update_decision(finding_id: int, req: DecisionRequest, db: Session = Depends(get_db)):
+    finding = db.query(Finding).filter(Finding.id == finding_id).first()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    finding.decision = req.decision
+    db.commit()
+    return {"status": "success", "decision": finding.decision}
+
 # ─── Background scan pipeline ──────────────────────────────────────────────────
 
 def process_github_scan(scan_id: int, repo_url: str, github_token: Optional[str], branch: Optional[str]):
@@ -191,7 +308,7 @@ def process_github_scan(scan_id: int, repo_url: str, github_token: Optional[str]
     git_mgr = GitManager()
     temp_dir = None
     try:
-        temp_dir = git_mgr.clone_repo(repo_url, branch=branch, github_token=github_token)
+        temp_dir = git_mgr.fetch_repo_tarball(repo_url, branch=branch, github_token=github_token)
 
         # 1. Parse dependencies — NpmParser expects parsed JSON dicts, not a path
         import json as _json
@@ -211,6 +328,34 @@ def process_github_scan(scan_id: int, repo_url: str, github_token: Optional[str]
 
         parser = NpmParser(package_json=_pkg_json, package_lock_json=_lock_json)
         deps = parser.parse()
+        # Python dependencies
+        _req_path = os.path.join(local_path, "requirements.txt")
+        _pip_path = os.path.join(local_path, "Pipfile.lock")
+        _req_txt, _pip_txt = "", ""
+        if os.path.exists(_req_path):
+            with open(_req_path, "r", encoding="utf-8") as _f:
+                _req_txt = _f.read()
+        if os.path.exists(_pip_path):
+            with open(_pip_path, "r", encoding="utf-8") as _f:
+                _pip_txt = _f.read()
+        if _req_txt or _pip_txt:
+            py_parser = PythonParser(requirements_txt=_req_txt, pipfile_lock=_pip_txt)
+            deps.extend(py_parser.parse())
+
+        # Python dependencies
+        _req_path = os.path.join(temp_dir, "requirements.txt")
+        _pip_path = os.path.join(temp_dir, "Pipfile.lock")
+        _req_txt, _pip_txt = "", ""
+        if os.path.exists(_req_path):
+            with open(_req_path, "r", encoding="utf-8") as _f:
+                _req_txt = _f.read()
+        if os.path.exists(_pip_path):
+            with open(_pip_path, "r", encoding="utf-8") as _f:
+                _pip_txt = _f.read()
+        if _req_txt or _pip_txt:
+            py_parser = PythonParser(requirements_txt=_req_txt, pipfile_lock=_pip_txt)
+            deps.extend(py_parser.parse())
+
 
         # 2. Build dependency graph
         graph = DependencyGraph()
@@ -267,6 +412,286 @@ def process_github_scan(scan_id: int, repo_url: str, github_token: Optional[str]
     finally:
         if temp_dir:
             git_mgr.cleanup(temp_dir)
+        db.commit()
+
+
+def process_zip_scan(scan_id: int, zip_bytes: bytes):
+    db = next(get_db())
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        return
+
+    scan.status = "IN_PROGRESS"
+    db.commit()
+
+    temp_dir = None
+    try:
+        temp_dir = ZipManager.extract_zip_archive(zip_bytes)
+
+        import json as _json
+        _pkg_json, _lock_json = None, None
+        _pkg_path = os.path.join(temp_dir, "package.json")
+        _lock_path = os.path.join(temp_dir, "package-lock.json")
+
+        if os.path.exists(_pkg_path):
+            with open(_pkg_path, "r", encoding="utf-8") as _f:
+                _pkg_json = _json.load(_f)
+
+        if os.path.exists(_lock_path):
+            with open(_lock_path, "r", encoding="utf-8") as _f:
+                _lock_json = _json.load(_f)
+
+        deps = []
+        if _pkg_json or _lock_json:
+            parser = NpmParser(package_json=_pkg_json, package_lock_json=_lock_json)
+            deps.extend(parser.parse())
+
+        # Python dependencies
+        _req_path = os.path.join(temp_dir, "requirements.txt")
+        _pip_path = os.path.join(temp_dir, "Pipfile.lock")
+        _req_txt, _pip_txt = "", ""
+        if os.path.exists(_req_path):
+            with open(_req_path, "r", encoding="utf-8") as _f:
+                _req_txt = _f.read()
+        if os.path.exists(_pip_path):
+            with open(_pip_path, "r", encoding="utf-8") as _f:
+                _pip_txt = _f.read()
+        if _req_txt or _pip_txt:
+            py_parser = PythonParser(requirements_txt=_req_txt, pipfile_lock=_pip_txt)
+            deps.extend(py_parser.parse())
+
+        if not deps:
+            raise Exception("No dependencies found in the extracted ZIP archive.")
+
+        graph = DependencyGraph()
+        graph.build_from_npm(deps)
+
+        osv = OSVClient()
+        risk_engine = RiskEngine()
+
+        BATCH_SIZE = 500
+        all_vuln_lists: list = []
+        for chunk_start in range(0, len(deps), BATCH_SIZE):
+            chunk = deps[chunk_start: chunk_start + BATCH_SIZE]
+            batch_results = osv.query_batch(chunk)
+            all_vuln_lists.extend(batch_results)
+
+        for dep, vulns in zip(deps, all_vuln_lists):
+            for vuln in vulns:
+                vuln_info = osv.format_vulnerability(vuln)
+                is_direct = dep.get("is_direct", False)
+                depth = graph.get_node_depth(f"{dep['name']}@{dep['version']}")
+                if depth < 0:
+                    depth = 1 if is_direct else 2
+
+                risk = risk_engine.calculate_risk(
+                    {**vuln_info, "source_usage_confirmed": is_direct},
+                    depth,
+                    is_direct,
+                )
+
+                finding = Finding(
+                    scan_id=scan_id,
+                    package_name=dep["name"],
+                    version=dep["version"],
+                    vulnerability_id=vuln_info["vulnerability_id"],
+                    cve=vuln_info.get("cve"),
+                    severity=vuln_info["severity"],
+                    risk_score=risk["score"],
+                    confidence=risk["confidence"],
+                    finding_type="DIRECT_VULNERABILITY" if is_direct else "TRANSITIVE_VULNERABILITY",
+                    summary=vuln_info.get("summary"),
+                )
+                db.add(finding)
+
+        scan.status = "COMPLETED"
+    except Exception as e:
+        import traceback
+        scan.status = "FAILED"
+        scan.error_message = str(e) if len(str(e)) < 500 else str(e)[:500]
+        print(f"ZIP Scan {scan_id} failed: {e}")
+        traceback.print_exc()
+    finally:
+        if temp_dir and os.path.exists(temp_dir):
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        db.commit()
+
+def process_local_scan(scan_id: int, local_path: str):
+    db = next(get_db())
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        return
+
+    scan.status = "IN_PROGRESS"
+    db.commit()
+
+    try:
+        # 1. Parse dependencies
+        import json as _json
+        _pkg_json = None
+        _lock_json = None
+
+        _pkg_path = os.path.join(local_path, "package.json")
+        _lock_path = os.path.join(local_path, "package-lock.json")
+
+        if os.path.exists(_pkg_path):
+            with open(_pkg_path, "r", encoding="utf-8") as _f:
+                _pkg_json = _json.load(_f)
+
+        if os.path.exists(_lock_path):
+            with open(_lock_path, "r", encoding="utf-8") as _f:
+                _lock_json = _json.load(_f)
+
+        if not _pkg_json and not _lock_json:
+            raise Exception("No package.json or package-lock.json found in the directory.")
+
+        parser = NpmParser(package_json=_pkg_json, package_lock_json=_lock_json)
+        deps = parser.parse()
+        # Python dependencies
+        _req_path = os.path.join(local_path, "requirements.txt")
+        _pip_path = os.path.join(local_path, "Pipfile.lock")
+        _req_txt, _pip_txt = "", ""
+        if os.path.exists(_req_path):
+            with open(_req_path, "r", encoding="utf-8") as _f:
+                _req_txt = _f.read()
+        if os.path.exists(_pip_path):
+            with open(_pip_path, "r", encoding="utf-8") as _f:
+                _pip_txt = _f.read()
+        if _req_txt or _pip_txt:
+            py_parser = PythonParser(requirements_txt=_req_txt, pipfile_lock=_pip_txt)
+            deps.extend(py_parser.parse())
+
+        # Python dependencies
+        _req_path = os.path.join(temp_dir, "requirements.txt")
+        _pip_path = os.path.join(temp_dir, "Pipfile.lock")
+        _req_txt, _pip_txt = "", ""
+        if os.path.exists(_req_path):
+            with open(_req_path, "r", encoding="utf-8") as _f:
+                _req_txt = _f.read()
+        if os.path.exists(_pip_path):
+            with open(_pip_path, "r", encoding="utf-8") as _f:
+                _pip_txt = _f.read()
+        if _req_txt or _pip_txt:
+            py_parser = PythonParser(requirements_txt=_req_txt, pipfile_lock=_pip_txt)
+            deps.extend(py_parser.parse())
+
+
+        # 2. Build dependency graph
+        graph = DependencyGraph()
+        graph.build_from_npm(deps)
+
+        # 3. Query OSV for vulnerabilities
+        osv = OSVClient()
+        risk_engine = RiskEngine()
+
+        BATCH_SIZE = 500
+        all_vuln_lists: list = []
+        for chunk_start in range(0, len(deps), BATCH_SIZE):
+            chunk = deps[chunk_start: chunk_start + BATCH_SIZE]
+            batch_results = osv.query_batch(chunk)
+            all_vuln_lists.extend(batch_results)
+
+        for dep, vulns in zip(deps, all_vuln_lists):
+            for vuln in vulns:
+                vuln_info = osv.format_vulnerability(vuln)
+                is_direct = dep.get("is_direct", False)
+                depth = graph.get_node_depth(f"{dep['name']}@{dep['version']}")
+                if depth < 0:
+                    depth = 1 if is_direct else 2
+
+                risk = risk_engine.calculate_risk(
+                    {**vuln_info, "source_usage_confirmed": is_direct},
+                    depth,
+                    is_direct,
+                )
+
+                finding = Finding(
+                    scan_id=scan_id,
+                    package_name=dep["name"],
+                    version=dep["version"],
+                    vulnerability_id=vuln_info["vulnerability_id"],
+                    cve=vuln_info.get("cve"),
+                    severity=vuln_info["severity"],
+                    risk_score=risk["score"],
+                    confidence=risk["confidence"],
+                    finding_type="DIRECT_VULNERABILITY" if is_direct else "TRANSITIVE_VULNERABILITY",
+                    summary=vuln_info.get("summary"),
+                )
+                db.add(finding)
+
+        scan.status = "COMPLETED"
+    except Exception as e:
+        import traceback
+        scan.status = "FAILED"
+        scan.error_message = str(e) if len(str(e)) < 500 else str(e)[:500]
+        print(f"Local Scan {scan_id} failed: {e}")
+        traceback.print_exc()
+    finally:
+        db.commit()
+
+def process_manifest_scan(scan_id: int, package_json: Optional[dict], package_lock_json: Optional[dict]):
+    db = next(get_db())
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        return
+
+    scan.status = "IN_PROGRESS"
+    db.commit()
+
+    try:
+        parser = NpmParser(package_json=package_json, package_lock_json=package_lock_json)
+        deps = parser.parse()
+
+        graph = DependencyGraph()
+        graph.build_from_npm(deps)
+
+        osv = OSVClient()
+        risk_engine = RiskEngine()
+
+        BATCH_SIZE = 500
+        all_vuln_lists: list = []
+        for chunk_start in range(0, len(deps), BATCH_SIZE):
+            chunk = deps[chunk_start: chunk_start + BATCH_SIZE]
+            batch_results = osv.query_batch(chunk)
+            all_vuln_lists.extend(batch_results)
+
+        for dep, vulns in zip(deps, all_vuln_lists):
+            for vuln in vulns:
+                vuln_info = osv.format_vulnerability(vuln)
+                is_direct = dep.get("is_direct", False)
+                depth = graph.get_node_depth(f"{dep['name']}@{dep['version']}")
+                if depth < 0:
+                    depth = 1 if is_direct else 2
+
+                risk = risk_engine.calculate_risk(
+                    {**vuln_info, "source_usage_confirmed": is_direct},
+                    depth,
+                    is_direct,
+                )
+
+                finding = Finding(
+                    scan_id=scan_id,
+                    package_name=dep["name"],
+                    version=dep["version"],
+                    vulnerability_id=vuln_info["vulnerability_id"],
+                    cve=vuln_info.get("cve"),
+                    severity=vuln_info["severity"],
+                    risk_score=risk["score"],
+                    confidence=risk["confidence"],
+                    finding_type="DIRECT_VULNERABILITY" if is_direct else "TRANSITIVE_VULNERABILITY",
+                    summary=vuln_info.get("summary"),
+                )
+                db.add(finding)
+
+        scan.status = "COMPLETED"
+    except Exception as e:
+        import traceback
+        scan.status = "FAILED"
+        scan.error_message = str(e) if len(str(e)) < 500 else str(e)[:500]
+        print(f"Manifest Scan {scan_id} failed: {e}")
+        traceback.print_exc()
+    finally:
         db.commit()
 
 # ─── Intelligence Routes ────────────────────────────────────────────────────────

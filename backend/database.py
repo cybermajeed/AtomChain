@@ -37,6 +37,7 @@ class Finding(Base):
     insight = Column(String)
     summary = Column(String, nullable=True)       # Human-readable OSV summary for AI context
     is_reviewed = Column(Integer, default=0)
+    decision = Column(String, default="PENDING") # Accept, Reject, Investigate, Override
     
     scan = relationship("Scan", back_populates="findings")
 
@@ -64,7 +65,8 @@ def _auto_migrate():
                 "cve": "VARCHAR",
                 "insight": "VARCHAR",
                 "summary": "VARCHAR",
-                "is_reviewed": "INTEGER DEFAULT 0"
+                "is_reviewed": "INTEGER DEFAULT 0",
+                "decision": "VARCHAR DEFAULT 'PENDING'"
             }.items():
                 if col_name not in existing_findings_cols:
                     conn.execute(text(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}"))

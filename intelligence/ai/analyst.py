@@ -51,42 +51,97 @@ class GroqAnalyst:
     MODEL = "openai/gpt-oss-120b"
 
     def __init__(self):
-        self.api_key = os.environ.get("GROQ_API_KEY", "").strip()
-        self._client = None
-        self._available = bool(self.api_key)
+        # Support single key or multiple keys for rotation (Groq & Gemini)
+        self.api_keys = []
+        
+        for i in range(1, 4):
+            key = os.environ.get(f"GROQ_API_KEY_{i}", "").strip()
+            if key:
+                self.api_keys.append({"provider": "groq", "key": key})
+            
+            g_key = os.environ.get(f"GEMINI_API_KEY_{i}", "").strip()
+            if g_key:
+                self.api_keys.append({"provider": "gemini", "key": g_key})
+        
+        # Fallback to single GROQ_API_KEY if specific numbered keys aren't found
+        if not self.api_keys:
+            key = os.environ.get("GROQ_API_KEY", "").strip()
+            if key:
+                self.api_keys.append({"provider": "groq", "key": key})
 
-    def _get_client(self):
-        if self._client is None and self._available:
-            try:
-                from groq import Groq  # type: ignore
-                self._client = Groq(api_key=self.api_key)
-            except ImportError:
-                self._available = False
-                print("[GroqAnalyst] groq package not installed. Run: pip install groq")
-            except Exception as e:
-                self._available = False
-                print(f"[GroqAnalyst] Failed to initialise Groq client: {e}")
-        return self._client
+        self.current_key_idx = 0
+        self._available = len(self.api_keys) > 0
 
-    def _call(self, system: str, user: str, max_tokens: int = 1024) -> Optional[str]:
-        """Make a Groq API call. Returns raw text or None on failure."""
-        client = self._get_client()
-        if not client:
-            return None
+    def _call_groq(self, api_key: str, system: str, user: str, max_tokens: int) -> Optional[str]:
         try:
+            from groq import Groq  # type: ignore
+            client = Groq(api_key=api_key)
             completion = client.chat.completions.create(
                 model=self.MODEL,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                temperature=0.15,  # Low temperature for consistent security analysis
+                temperature=0.15,
                 max_tokens=max_tokens,
             )
             return completion.choices[0].message.content
-        except Exception as e:
-            print(f"[GroqAnalyst] API call failed: {e}")
+        except ImportError:
+            print("[GroqAnalyst] groq package not installed. Run: pip install groq")
+            raise
+        
+    def _call_gemini(self, api_key: str, system: str, user: str, max_tokens: int) -> Optional[str]:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            # gemini-1.5-flash is extremely fast and capable
+            model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system)
+            response = model.generate_content(
+                user,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.15,
+                    max_output_tokens=max_tokens,
+                )
+            )
+            return response.text
+        except ImportError:
+            print("[GroqAnalyst] google-generativeai package not installed. Run: pip install google-generativeai")
+            raise
+
+    def _call(self, system: str, user: str, max_tokens: int = 1024) -> Optional[str]:
+        """Make an API call to Groq or Gemini. Returns raw text or None on failure, supports key rotation."""
+        if not self._available:
             return None
+
+        attempts = 0
+        max_attempts = 6  # Up to 6 rotations
+
+        while attempts < max_attempts:
+            key_info = self.api_keys[self.current_key_idx]
+            provider = key_info["provider"]
+            api_key = key_info["key"]
+            
+            try:
+                if provider == "groq":
+                    res = self._call_groq(api_key, system, user, max_tokens)
+                elif provider == "gemini":
+                    res = self._call_gemini(api_key, system, user, max_tokens)
+                else:
+                    raise ValueError(f"Unknown provider: {provider}")
+                
+                if res:
+                    return res
+                else:
+                    raise Exception("Empty response returned from model.")
+            except Exception as e:
+                print(f"[GroqAnalyst] API call failed with key {self.current_key_idx + 1} ({provider}): {e}")
+                # Rotate to the next key
+                self.current_key_idx = (self.current_key_idx + 1) % len(self.api_keys)
+                print(f"[GroqAnalyst] Switching to key {self.current_key_idx + 1}...")
+                attempts += 1
+
+        print("[GroqAnalyst] All 6 API rotation attempts exhausted or failed.")
+        return None
 
     def analyze_finding(
         self,
@@ -123,7 +178,7 @@ class GroqAnalyst:
             user_question=user_question,
         )
 
-        raw = self._call(SYSTEM_INSTRUCTION, prompt, max_tokens=1200)
+        raw = self._call(SYSTEM_INSTRUCTION, prompt, max_tokens=2500)
         if not raw:
             return _UNAVAILABLE_ANALYSIS
 
@@ -132,13 +187,11 @@ class GroqAnalyst:
     def _parse_analysis(self, raw: str) -> AIAnalysis:
         """Parse the JSON response from the model into an AIAnalysis object."""
         try:
-            # Strip markdown code fences if the model wrapped the JSON
-            text = raw.strip()
-            if text.startswith("```"):
-                lines = text.split("\n")
-                # Remove first and last fence lines
-                text = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
-
+            import re
+            # Robustly extract JSON object from markdown or surrounding text
+            match = re.search(r'\{.*\}', raw, re.DOTALL)
+            text = match.group(0) if match else raw.strip()
+            
             data = json.loads(text)
 
             confidence_data = data.get("confidence", {})
