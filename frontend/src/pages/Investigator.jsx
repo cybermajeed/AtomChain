@@ -4,6 +4,9 @@ import {
   RefreshCw, MessageCircle, Info
 } from 'lucide-react'
 
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
 // ─── Preset copilot questions ─────────────────────────────────────────────────
 
 const PRESET_QUESTIONS = [
@@ -14,6 +17,31 @@ const PRESET_QUESTIONS = [
   'What vulnerabilities are confirmed vs suspected?',
   'What should I verify after fixing the top issue?',
 ]
+
+// ─── Markdown Components Map ───────────────────────────────────────────────────
+
+const markdownComponents = {
+  p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+  ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
+  ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
+  li: ({node, ...props}) => <li className="pl-1" {...props} />,
+  h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2 mt-4 text-on-dark" {...props} />,
+  h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2 mt-3 text-on-dark" {...props} />,
+  h3: ({node, ...props}) => <h3 className="text-sm font-bold mb-1 mt-2 text-on-dark" {...props} />,
+  a: ({node, ...props}) => <a className="text-primary hover:underline" {...props} />,
+  strong: ({node, ...props}) => <strong className="font-semibold text-on-dark" {...props} />,
+  code: ({node, inline, ...props}) => inline ? (
+    <code className="bg-canvas-dark px-1 py-0.5 rounded text-[0.9em] font-plex text-trading-up" {...props} />
+  ) : (
+    <pre className="bg-canvas-dark p-3 rounded-lg overflow-x-auto my-2 border border-hairline-on-dark">
+      <code className="font-plex text-sm text-body" {...props} />
+    </pre>
+  ),
+  table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="w-full text-left border-collapse text-sm" {...props} /></div>,
+  th: ({node, ...props}) => <th className="border-b border-hairline-on-dark px-2 py-1.5 font-medium text-muted whitespace-nowrap" {...props} />,
+  td: ({node, ...props}) => <td className="border-b border-hairline-on-dark/50 px-2 py-1.5" {...props} />,
+  blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-primary pl-3 italic text-muted my-2" {...props} />
+}
 
 // ─── Message bubble ────────────────────────────────────────────────────────────
 
@@ -27,13 +55,21 @@ function MessageBubble({ msg }) {
         </div>
       )}
       <div
-        className={`max-w-[85%] px-4 py-3 rounded-xl text-body-sm leading-relaxed ${
+        className={`max-w-[85%] px-4 py-3 rounded-xl text-body-sm leading-relaxed overflow-hidden ${
           isUser
             ? 'bg-primary text-ink rounded-br-sm'
             : 'bg-surface-card-dark border border-hairline-on-dark text-body rounded-bl-sm'
         }`}
       >
-        {msg.content}
+        <div className={isUser ? "whitespace-pre-wrap" : ""}>
+          {isUser ? (
+            msg.content
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {msg.content}
+            </ReactMarkdown>
+          )}
+        </div>
         {msg.loading && (
           <div className="flex items-center gap-1 mt-2">
             <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:0ms]" />
@@ -80,7 +116,7 @@ export default function Investigator() {
     {
       role: 'assistant',
       content:
-        "I'm your SupplyShield Security Analyst, powered by Groq's llama-3.3-70b. " +
+        "I'm your SupplyShield Security Analyst, powered by Groq's gpt-oss-120b. " +
         "I have access to your scan findings and can help you understand vulnerabilities, " +
         "prioritize remediation, and interpret the dependency risk. " +
         "Enter a scan ID above to get started, or ask me anything.",
@@ -194,7 +230,7 @@ export default function Investigator() {
               <h1 className="text-title-md text-on-dark">AI Investigator</h1>
               <div className="flex items-center gap-1.5">
                 <Sparkles size={11} className="text-primary" />
-                <span className="text-caption text-muted">Groq · llama-3.3-70b-versatile</span>
+                <span className="text-caption text-muted">Groq · gpt-oss-120b</span>
               </div>
             </div>
           </div>

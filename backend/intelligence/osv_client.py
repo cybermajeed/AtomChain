@@ -55,7 +55,26 @@ class OSVClient:
                 response.raise_for_status()
                 data = response.json()
                 
-                return [result.get("vulns", []) for result in data.get("results", [])]
+                # The /v1/querybatch endpoint only returns 'id' and 'modified'.
+                # We need to fetch the full details for any vulnerabilities found.
+                results = []
+                for result in data.get("results", []):
+                    full_vulns = []
+                    for min_vuln in result.get("vulns", []):
+                        vuln_id = min_vuln.get("id")
+                        try:
+                            # Fetch full vuln detail
+                            detail_res = client.get(f"https://api.osv.dev/v1/vulns/{vuln_id}")
+                            if detail_res.status_code == 200:
+                                full_vulns.append(detail_res.json())
+                            else:
+                                full_vulns.append(min_vuln) # Fallback to minimal
+                        except Exception as fetch_err:
+                            print(f"Failed to fetch full detail for {vuln_id}: {fetch_err}")
+                            full_vulns.append(min_vuln)
+                    results.append(full_vulns)
+                
+                return results
         except Exception as e:
             print(f"Error executing OSV batch query: {e}")
             # Fallback to empty results

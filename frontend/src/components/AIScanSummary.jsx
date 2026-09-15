@@ -1,5 +1,32 @@
 import { useState, useEffect } from 'react'
 import { Brain, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
+// ─── Markdown Components Map ───────────────────────────────────────────────────
+
+const markdownComponents = {
+  p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+  ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
+  ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
+  li: ({node, ...props}) => <li className="pl-1" {...props} />,
+  h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2 mt-4 text-on-dark" {...props} />,
+  h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2 mt-3 text-on-dark" {...props} />,
+  h3: ({node, ...props}) => <h3 className="text-sm font-bold mb-1 mt-2 text-on-dark" {...props} />,
+  a: ({node, ...props}) => <a className="text-primary hover:underline" {...props} />,
+  strong: ({node, ...props}) => <strong className="font-semibold text-on-dark" {...props} />,
+  code: ({node, inline, ...props}) => inline ? (
+    <code className="bg-canvas-dark px-1 py-0.5 rounded text-[0.9em] font-plex text-trading-up" {...props} />
+  ) : (
+    <pre className="bg-canvas-dark p-3 rounded-lg overflow-x-auto my-2 border border-hairline-on-dark">
+      <code className="font-plex text-sm text-body" {...props} />
+    </pre>
+  ),
+  table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="w-full text-left border-collapse text-sm" {...props} /></div>,
+  th: ({node, ...props}) => <th className="border-b border-hairline-on-dark px-2 py-1.5 font-medium text-muted whitespace-nowrap" {...props} />,
+  td: ({node, ...props}) => <td className="border-b border-hairline-on-dark/50 px-2 py-1.5" {...props} />,
+  blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-primary pl-3 italic text-muted my-2" {...props} />
+}
 
 /**
  * AIScanSummary — compact AI overview card shown after a scan completes.
@@ -45,7 +72,7 @@ export default function AIScanSummary({ scanId }) {
         </div>
         <div className="flex items-center gap-1">
           <Sparkles size={12} className="text-primary" />
-          <span className="text-caption text-muted">Groq · llama-3.3-70b</span>
+          <span className="text-caption text-muted">Groq · gpt-oss-120b</span>
         </div>
       </div>
 
@@ -64,7 +91,11 @@ export default function AIScanSummary({ scanId }) {
       )}
 
       {summary && !loading && (
-        <p className="text-body-sm text-body leading-relaxed">{summary}</p>
+        <div className="text-body-sm text-body leading-relaxed">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {summary}
+          </ReactMarkdown>
+        </div>
       )}
 
       {!summary && !loading && !error && (

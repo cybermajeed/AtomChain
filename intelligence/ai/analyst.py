@@ -1,7 +1,7 @@
 """
 AI Security Analyst — Groq Provider
 ======================================
-Uses Groq's free llama-3.3-70b-versatile model for security reasoning.
+Uses Groq's free openai/gpt-oss-120b model for security reasoning.
 The analyst interprets existing security engine data — it does NOT replace it.
 
 Architecture:
@@ -45,10 +45,10 @@ _UNAVAILABLE_ANALYSIS = AIAnalysis(
 class GroqAnalyst:
     """
     Groq-powered AI security analyst.
-    Uses llama-3.3-70b-versatile (free tier on Groq).
+    Uses openai/gpt-oss-120b (free tier on Groq).
     Gracefully returns a fallback response if the key is missing or Groq is unreachable.
     """
-    MODEL = "llama-3.3-70b-versatile"
+    MODEL = "openai/gpt-oss-120b"
 
     def __init__(self):
         self.api_key = os.environ.get("GROQ_API_KEY", "").strip()
