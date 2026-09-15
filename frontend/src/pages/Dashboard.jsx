@@ -26,14 +26,14 @@ export default function Dashboard({ githubToken }) {
       // 2. Check access via GitHub API
       const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
         headers: {
-          'Authorization': `token ${githubToken}`,
+          'Authorization': `Bearer ${githubToken}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       });
 
       if (!ghRes.ok) {
         if (ghRes.status === 404 || ghRes.status === 403) {
-           throw new Error('Security Error: You do not have access to this repository. You can only scan repositories you own or have access to.');
+           throw new Error('Security Error: You do not have access to this repository. If this is a private repo, ensure your Personal Access Token has the "repo" scope checked.');
         }
         throw new Error(`GitHub API Error: ${ghRes.statusText}`);
       }

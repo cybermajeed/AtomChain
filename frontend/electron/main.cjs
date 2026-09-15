@@ -74,6 +74,11 @@ app.on('window-all-closed', function () {
 app.on('will-quit', () => {
   if (pythonProcess) {
     console.log('Killing python backend...');
-    pythonProcess.kill();
+    if (process.platform === 'win32') {
+      const { spawn } = require('child_process');
+      spawn('taskkill', ['/pid', pythonProcess.pid, '/f', '/t']);
+    } else {
+      pythonProcess.kill();
+    }
   }
 });
