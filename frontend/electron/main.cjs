@@ -1,7 +1,15 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+
+ipcMain.handle('select-directory', async () => {
+  const result = await dialog.showOpenDialog(BrowserWindow.getAllWindows()[0], {
+    properties: ['openDirectory']
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
 
 let mainWindow;
 let pythonProcess;
@@ -30,7 +38,15 @@ function createWindow() {
 }
 
 function startPythonBackend() {
-  const backendPath = path.join(__dirname, '../../backend');
+  const isDev = !app.isPackaged;
+  let backendPath;
+  
+  if (isDev) {
+    backendPath = path.join(__dirname, '../../backend');
+  } else {
+    backendPath = path.join(process.resourcesPath, 'backend');
+  }
+  
   const pythonExecutable = path.join(backendPath, 'venv/Scripts/python.exe');
   const mainScript = path.join(backendPath, 'main.py');
   
