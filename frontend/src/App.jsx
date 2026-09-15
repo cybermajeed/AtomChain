@@ -1,16 +1,35 @@
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom'
-import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ChevronDown, Atom } from 'lucide-react'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 
 function App() {
   const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '')
+  const [userProfile, setUserProfile] = useState(null)
 
   const handleSetToken = (token) => {
     setGithubToken(token)
     localStorage.setItem('github_token', token)
   }
+
+  useEffect(() => {
+    if (githubToken) {
+      fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.login) setUserProfile(data)
+      })
+      .catch(console.error)
+    } else {
+      setUserProfile(null)
+    }
+  }, [githubToken])
 
   return (
     <BrowserRouter>
@@ -20,9 +39,9 @@ function App() {
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-2 cursor-pointer">
               <div className="w-8 h-8 bg-primary rounded flex items-center justify-center font-bold text-ink text-xl font-plex leading-none">
-                S
+                <Atom size={20} strokeWidth={2.5} />
               </div>
-              <span className="font-bold text-lg text-primary tracking-tight">SUSTAINVERSE</span>
+              <span className="font-bold text-lg text-primary tracking-tight">ATOMCHAIN</span>
             </Link>
             {githubToken && (
               <div className="hidden md:flex items-center gap-6 text-nav-link text-on-dark">
@@ -35,12 +54,20 @@ function App() {
           </div>
           <div className="flex items-center gap-4">
             {githubToken ? (
-              <button 
-                onClick={() => handleSetToken('')}
-                className="text-body hover:text-primary transition-colors text-button"
-              >
-                Sign Out
-              </button>
+              <div className="flex items-center gap-4">
+                {userProfile && (
+                  <div className="hidden md:flex items-center gap-2">
+                    <img src={userProfile.avatar_url} alt="Profile" className="w-8 h-8 rounded-full border border-hairline-on-dark" />
+                    <span className="text-body-sm text-on-dark font-medium">{userProfile.login}</span>
+                  </div>
+                )}
+                <button 
+                  onClick={() => handleSetToken('')}
+                  className="text-body hover:text-primary transition-colors text-button"
+                >
+                  Sign Out
+                </button>
+              </div>
             ) : (
               <>
                 <Link to="/" className="text-body hover:text-primary transition-colors text-button hidden md:block">
@@ -73,7 +100,7 @@ function App() {
           <div className="max-w-[1280px] mx-auto px-6">
             <div className="border-t border-hairline-on-light pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
               <p className="text-caption text-muted-strong">
-                © 2026 Sustainverse. Local Open Source Edition.
+                © 2026 AtomChain. Local Open Source Edition.
               </p>
             </div>
           </div>

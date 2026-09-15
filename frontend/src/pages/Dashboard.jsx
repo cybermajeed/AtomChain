@@ -1,11 +1,50 @@
 import { useState, useEffect } from 'react'
-import { Search, ShieldCheck, Activity, Globe, Zap, ArrowRight, ShieldAlert } from 'lucide-react'
+import { Search, ShieldCheck, Activity, Globe, Zap, ArrowRight, ShieldAlert, FolderOpen, CheckCircle, Circle, ExternalLink } from 'lucide-react'
+import DependencyGraph from '../components/DependencyGraph'
 
 export default function Dashboard({ githubToken }) {
   const [repoUrl, setRepoUrl] = useState('')
-  const [scanResult, setScanResult] = useState(null)
   const [isScanning, setIsScanning] = useState(false)
+  const [scanResult, setScanResult] = useState(null)
   const [pollingId, setPollingId] = useState(null)
+  const [viewMode, setViewMode] = useState('table')
+
+  const loadingMessages = [
+    "Locating project metadata and manifest files...",
+    "Parsing dependency trees and resolving graph...",
+    "Querying OSV vulnerability database for deep insights...",
+    "Calculating contextual risk vectors and topology penalties...",
+    "Finalizing cryptographic trust ledger entries..."
+  ];
+  
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+
+  useEffect(() => {
+    let interval;
+    if (isScanning && !scanResult) {
+      interval = setInterval(() => {
+        setLoadingMsgIdx(prev => (prev + 1) % loadingMessages.length);
+      }, 2500);
+    } else {
+      setLoadingMsgIdx(0);
+    }
+    return () => clearInterval(interval);
+  }, [isScanning, scanResult]);
+
+  const toggleReview = async (findingId, index) => {
+    if (!findingId) return;
+    const newDeps = [...scanResult.dependencies];
+    newDeps[index].is_reviewed = !newDeps[index].is_reviewed;
+    setScanResult({ ...scanResult, dependencies: newDeps });
+
+    try {
+      await fetch(`http://127.0.0.1:8000/api/findings/${findingId}/review`, { method: 'POST' });
+    } catch (e) {
+      console.error('Failed to review', e);
+      newDeps[index].is_reviewed = !newDeps[index].is_reviewed;
+      setScanResult({ ...scanResult, dependencies: newDeps });
+    }
+  }
 
   const handleScan = async () => {
     setIsScanning(true)
@@ -57,6 +96,34 @@ export default function Dashboard({ githubToken }) {
     } catch (e) {
       console.error(e)
       setScanResult({ error: e.message || 'Failed to reach backend. Make sure Uvicorn is running on port 8000.' })
+      setIsScanning(false)
+    }
+  }
+
+  const handleLocalScan = async () => {
+    if (!window.electronAPI) {
+      alert("Local scanning is only available in the AtomChain desktop app.");
+      return;
+    }
+    
+    try {
+      const directoryPath = await window.electronAPI.selectDirectory();
+      if (!directoryPath) return;
+
+      setIsScanning(true);
+      setScanResult(null);
+
+      const res = await fetch('http://127.0.0.1:8000/api/scan/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory_path: directoryPath })
+      })
+      if (!res.ok) throw new Error('Failed to initiate local scan')
+      const data = await res.json()
+      setPollingId(data.scan_id)
+    } catch (e) {
+      console.error(e)
+      setScanResult({ error: e.message || 'Failed to reach backend.' })
       setIsScanning(false)
     }
   }
@@ -131,6 +198,23 @@ export default function Dashboard({ githubToken }) {
               )}
             </button>
           </div>
+          
+          <div className="mt-8 flex items-center justify-center gap-4 text-body-sm text-muted">
+            <span className="w-16 h-px bg-hairline-on-dark"></span>
+            <span className="tracking-widest uppercase text-xs">OR</span>
+            <span className="w-16 h-px bg-hairline-on-dark"></span>
+          </div>
+          
+          <div className="mt-6 flex justify-center">
+            <button 
+              onClick={handleLocalScan}
+              disabled={isScanning}
+              className="h-10 px-6 rounded-pill border border-hairline-on-dark text-on-dark hover:bg-surface-elevated-dark disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              <FolderOpen size={16} className="text-primary" />
+              Scan Local Directory
+            </button>
+          </div>
         </div>
       </section>
 
@@ -143,10 +227,14 @@ export default function Dashboard({ githubToken }) {
           </div>
 
           {isScanning && !scanResult ? (
-            <div className="bg-surface-card-dark border border-hairline-on-dark rounded-xl p-12 text-center max-w-2xl mx-auto flex flex-col items-center">
+            <div className="bg-surface-card-dark border border-hairline-on-dark rounded-xl p-12 text-center max-w-2xl mx-auto flex flex-col items-center min-h-[300px] justify-center">
                <Activity size={48} className="text-primary animate-pulse mb-6" />
                <h3 className="text-title-lg text-on-dark mb-2">Analyzing Repository</h3>
-               <p className="text-body-md text-muted">Cloning, building dependency tree, and querying OSV intelligence...</p>
+               <div className="h-8 flex items-center justify-center">
+                 <p className="text-body-md text-muted animate-fade-in">
+                   {loadingMessages[loadingMsgIdx]}
+                 </p>
+               </div>
             </div>
           ) : scanResult.error ? (
             <div className="bg-surface-card-dark border border-trading-down rounded-xl p-8 text-center max-w-2xl mx-auto">
@@ -184,52 +272,86 @@ export default function Dashboard({ githubToken }) {
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-title-md text-on-dark">Dependency Vulnerabilities</h3>
                   <div className="flex gap-4 border-b border-hairline-on-dark">
-                    <button className="text-body-sm font-medium text-primary border-b-2 border-primary pb-2 px-1">All Findings ({scanResult.dependencies?.length || 0})</button>
+                    <button 
+                      onClick={() => setViewMode('table')}
+                      className={`text-body-sm font-medium pb-2 px-1 ${viewMode === 'table' ? 'text-primary border-b-2 border-primary' : 'text-muted hover:text-on-dark transition-colors'}`}
+                    >
+                      Table View
+                    </button>
+                    <button 
+                      onClick={() => setViewMode('graph')}
+                      className={`text-body-sm font-medium pb-2 px-1 ${viewMode === 'graph' ? 'text-primary border-b-2 border-primary' : 'text-muted hover:text-on-dark transition-colors'}`}
+                    >
+                      Graph View
+                    </button>
                   </div>
                 </div>
 
-                {/* Table Header */}
-                <div className="grid grid-cols-12 gap-4 text-caption text-muted mb-4 px-2">
-                  <div className="col-span-5">Package / Version</div>
-                  <div className="col-span-3 text-right">Severity</div>
-                  <div className="col-span-3 text-right">Topology</div>
-                  <div className="col-span-1"></div>
-                </div>
-
-                {/* Table Rows */}
-                <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
-                  {scanResult.dependencies && scanResult.dependencies.length > 0 ? (
-                    scanResult.dependencies.map((dep, i) => (
-                      <div key={i} className="grid grid-cols-12 gap-4 items-center py-3 px-2 rounded-lg hover:bg-surface-elevated-dark transition-colors cursor-pointer group border-b border-hairline-on-dark last:border-0">
-                        <div className="col-span-5 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-surface-elevated-dark flex items-center justify-center font-plex text-xs text-primary">npm</div>
-                          <span className="text-number-md text-on-dark truncate" title={dep.id}>{dep.id}</span>
-                        </div>
-                        <div className="col-span-3 text-right font-plex text-number-md">
-                          {['CRITICAL', 'HIGH'].includes(dep.risk) ? (
-                            <span className="text-trading-down">{dep.risk}</span>
-                          ) : dep.risk === 'MEDIUM' ? (
-                            <span className="text-primary">{dep.risk}</span>
-                          ) : (
-                            <span className="text-trading-up">{dep.risk}</span>
-                          )}
-                        </div>
-                        <div className="col-span-3 text-right text-body-sm text-body">
-                          {dep.direct ? 'Direct' : 'Transitive'}
-                        </div>
-                        <div className="col-span-1 flex justify-end">
-                          <button className="text-muted group-hover:text-primary transition-colors">
-                            <ArrowRight size={18} />
-                          </button>
-                        </div>
+                {viewMode === 'table' ? (
+                  <>
+                    {/* Table Header */}
+                    <div className="grid grid-cols-12 gap-4 text-caption text-muted mb-4 px-2">
+                      <div className="col-span-3">Package / Version</div>
+                      <div className="col-span-5">OSV Insight</div>
+                      <div className="col-span-2 text-right">Severity</div>
+                      <div className="col-span-2 flex justify-end gap-4 pr-2">
+                        <span>Review</span>
+                        <span>Link</span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="py-8 text-center text-muted">
-                      No vulnerabilities found! Your dependencies are secure.
                     </div>
-                  )}
-                </div>
+
+                    {/* Table Rows */}
+                    <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+                      {scanResult.dependencies && scanResult.dependencies.length > 0 ? (
+                        scanResult.dependencies.map((dep, i) => (
+                          <div key={i} className={`grid grid-cols-12 gap-4 items-center py-3 px-2 rounded-lg transition-colors border-b border-hairline-on-dark last:border-0 ${dep.is_reviewed ? 'opacity-40 hover:opacity-100 bg-canvas-dark' : 'hover:bg-surface-elevated-dark'}`}>
+                            <div className="col-span-3 flex items-center gap-3">
+                              <span className="text-number-md text-on-dark truncate" title={dep.id}>{dep.id}</span>
+                            </div>
+                            <div className="col-span-5 text-xs text-muted truncate" title={dep.insight}>
+                              {dep.insight}
+                            </div>
+                            <div className="col-span-2 text-right font-plex text-number-md">
+                              {['CRITICAL', 'HIGH'].includes(dep.risk) ? (
+                                <span className="text-trading-down">{dep.risk}</span>
+                              ) : dep.risk === 'MEDIUM' ? (
+                                <span className="text-primary">{dep.risk}</span>
+                              ) : (
+                                <span className="text-trading-up">{dep.risk}</span>
+                              )}
+                            </div>
+                            <div className="col-span-2 flex justify-end items-center gap-6 pr-2">
+                              <button 
+                                onClick={() => toggleReview(dep.finding_id, i)}
+                                className="text-muted hover:text-primary transition-colors cursor-pointer"
+                                title="Mark as Reviewed"
+                              >
+                                {dep.is_reviewed ? <CheckCircle size={18} className="text-primary" /> : <Circle size={18} />}
+                              </button>
+                              <a 
+                                href={`https://osv.dev/vulnerability/${dep.vulnerability_id}`} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="text-muted hover:text-primary transition-colors"
+                                title="View on OSV.dev"
+                              >
+                                <ExternalLink size={18} />
+                              </a>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-8 text-center text-muted">
+                          No vulnerabilities found! Your dependencies are secure.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="pt-2">
+                    <DependencyGraph dependencies={scanResult.dependencies || []} />
+                  </div>
+                )}
               </div>
               
             </div>

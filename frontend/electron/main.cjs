@@ -1,7 +1,15 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+
+ipcMain.handle('select-directory', async () => {
+  const result = await dialog.showOpenDialog(BrowserWindow.getAllWindows()[0], {
+    properties: ['openDirectory']
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
 
 let mainWindow;
 let pythonProcess;
