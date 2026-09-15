@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { ChevronDown, Atom } from "lucide-react";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import TrustLedger from "./pages/TrustLedger";
 
 function App() {
   const [githubToken, setGithubToken] = useState(
@@ -55,9 +56,9 @@ function App() {
                 >
                   Dashboard
                 </Link>
-                <a href="#" className="hover:text-primary transition-colors">
+                <Link to="/ledger" className="hover:text-primary transition-colors">
                   Trust Ledger
-                </a>
+                </Link>
                 <a href="#" className="hover:text-primary transition-colors">
                   AI Investigator
                 </a>
@@ -123,6 +124,16 @@ function App() {
               element={
                 githubToken ? (
                   <Dashboard githubToken={githubToken} />
+                ) : (
+                  <Navigate to="/" />
+                )
+              }
+            />
+            <Route
+              path="/ledger"
+              element={
+                githubToken ? (
+                  <TrustLedger />
                 ) : (
                   <Navigate to="/" />
                 )

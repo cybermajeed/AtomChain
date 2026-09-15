@@ -8,7 +8,7 @@ from typing import List, Optional
 import os
 import json
 
-from database import get_db, Scan, Finding
+from database import get_db, Scan, Finding, TrustRecord
 from scanner.github_client import GitHubAPIClient
 from parsers.npm_parser import NpmParser
 from parsers.python_parser import PythonParser
@@ -115,7 +115,7 @@ def get_scan_result(scan_id: int, db: Session = Depends(get_db)):
     findings = db.query(Finding).filter(Finding.scan_id == scan_id).all()
     
     # Calculate overall score based on worst finding
-    overall_score = 100
+    overall_score = 0
     level = "LOW"
     
     if findings:
@@ -144,6 +144,29 @@ def get_scan_result(scan_id: int, db: Session = Depends(get_db)):
             } for f in findings
         ]
     }
+
+@app.get("/api/ledger")
+def get_ledger(db: Session = Depends(get_db)):
+    records = db.query(TrustRecord).order_by(TrustRecord.id.desc()).all()
+    result = []
+    for r in records:
+        scan = db.query(Scan).filter(Scan.id == r.scan_id).first()
+        repo = scan.repository_url if scan else "Unknown"
+        result.append({
+            "id": r.id,
+            "scan_id": r.scan_id,
+            "repository": repo,
+            "previous_hash": r.previous_hash,
+            "record_hash": r.record_hash,
+            "timestamp": r.timestamp.isoformat()
+        })
+    return result
+
+@app.post("/api/ledger/verify")
+def verify_ledger(db: Session = Depends(get_db)):
+    ledger = TrustLedger(db)
+    is_valid = ledger.verify_chain()
+    return {"valid": is_valid}
 
 @app.post("/api/findings/{finding_id}/review")
 def review_finding(finding_id: int, db: Session = Depends(get_db)):
