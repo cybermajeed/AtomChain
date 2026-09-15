@@ -1,0 +1,19 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.sustainverse.atomchain
+productName: AtomChain
+win:
+  target:
+    - nsis
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - package.json
+extraResources:
+  - from: ../backend
+    to: backend
+    filter:
+      - '**/*'
+electronVersion: 44.3.0

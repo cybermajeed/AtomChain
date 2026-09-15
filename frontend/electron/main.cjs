@@ -38,7 +38,15 @@ function createWindow() {
 }
 
 function startPythonBackend() {
-  const backendPath = path.join(__dirname, '../../backend');
+  const isDev = !app.isPackaged;
+  let backendPath;
+  
+  if (isDev) {
+    backendPath = path.join(__dirname, '../../backend');
+  } else {
+    backendPath = path.join(process.resourcesPath, 'backend');
+  }
+  
   const pythonExecutable = path.join(backendPath, 'venv/Scripts/python.exe');
   const mainScript = path.join(backendPath, 'main.py');
   
