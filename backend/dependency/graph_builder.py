@@ -30,6 +30,13 @@ class DependencyGraph:
             else:
                 self.graph.add_edge(last_direct, node_id, relationship="depends_on")
 
+    def build(self, dependencies: List[Dict[str, Any]]):
+        """
+        Ecosystem-agnostic graph builder. Same topology as build_from_npm but
+        handles any manifest source (npm, PyPI, Go, Maven, ...).
+        """
+        self.build_from_npm(dependencies)
+
     def get_node_depth(self, node_id: str) -> int:
         """
         Calculates the shortest path depth from the ROOT node.

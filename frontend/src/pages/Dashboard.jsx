@@ -1,11 +1,36 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search, ShieldCheck, Activity, Globe, Zap, ArrowRight, ShieldAlert, Folder, Archive } from 'lucide-react'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Pulse, Globe, Lightning, ArrowRight, Warning, Folder, Archive, CaretDown, GitBranch } from '@phosphor-icons/react'
 import FindingDetailPanel from '../components/FindingDetailPanel'
 import AIScanSummary from '../components/AIScanSummary'
 
+// Every dependency manifest the scanner understands (mirrors backend/parsers/manifest_parser.py)
+const MANIFEST_EXACT = [
+  'package.json', 'package-lock.json', 'npm-shrinkwrap.json',
+  'yarn.lock', 'pnpm-lock.yaml', 'pnpm-lock.yml',
+  'pipfile', 'pipfile.lock', 'pyproject.toml', 'poetry.lock',
+  'setup.py', 'setup.cfg',
+  'requirements.txt', 'requirements.in', 'dev-requirements.txt',
+  'test-requirements.txt', 'constraints.txt', 'constraints.in',
+  'go.mod', 'cargo.toml', 'cargo.lock',
+  'gemfile', 'gems.rb', 'gemfile.lock',
+  'composer.json', 'composer.lock', 'pom.xml', 'packages.config',
+  'environment.yml', 'environment.yaml',
+]
+
+const isManifestFile = (name) => {
+  const base = (name || '').toLowerCase()
+  if (MANIFEST_EXACT.includes(base)) return true
+  if (base.startsWith('requirements-') && base.endsWith('.txt')) return true
+  if (base.endsWith('.csproj') || base.endsWith('.fsproj') || base.endsWith('.props')) return true
+  return false
+}
+
 export default function Dashboard({ githubToken }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const [repoUrl, setRepoUrl] = useState(() => localStorage.getItem('cached_repo_url') || '')
   const [localPath, setLocalPath] = useState(() => localStorage.getItem('cached_local_path') || '')
   const [scanResult, setScanResult] = useState(() => {
@@ -22,12 +47,48 @@ export default function Dashboard({ githubToken }) {
   const [scanStage, setScanStage] = useState('Initializing scan...')
   const folderInputRef = useRef(null)
   const zipInputRef = useRef(null)
+  const repoDropdownRef = useRef(null)
+  const [isRepoDropdownOpen, setIsRepoDropdownOpen] = useState(false)
+  const [userRepos, setUserRepos] = useState(null)
+  const [reposLoading, setReposLoading] = useState(false)
+  const [reposError, setReposError] = useState('')
 
   useEffect(() => {
     if (scanResult) {
       localStorage.setItem('cached_scan_result', JSON.stringify(scanResult))
     }
   }, [scanResult])
+
+  // Handle History panel actions
+  useEffect(() => {
+    const historyScanId = searchParams.get('scan_id');
+    if (historyScanId) {
+      setPollingId(parseInt(historyScanId, 10));
+      setIsScanning(true);
+      setScanProgress(95);
+      setScanStage('Loading cached history...');
+      searchParams.delete('scan_id');
+      setSearchParams(searchParams, { replace: true });
+    }
+
+    if (location.state?.rescanUrl) {
+      const url = location.state.rescanUrl;
+      // Need to clear the state so it doesn't infinite loop on re-renders
+      navigate(location.pathname, { replace: true });
+      
+      if (url.startsWith('zip://') || url.startsWith('local://') || url.startsWith('folder://')) {
+         setLocalPath(url);
+         // Cannot easily auto-rescan zip/local without file selection, so just prefill
+      } else {
+         setRepoUrl(url);
+         // Simulate clicking scan
+         setTimeout(() => {
+           const ev = new KeyboardEvent('keydown', { key: 'Enter' });
+           document.getElementById('repo-input')?.dispatchEvent(ev);
+         }, 500);
+      }
+    }
+  }, [searchParams, location, navigate, setSearchParams]);
 
   useEffect(() => {
     if (repoUrl) localStorage.setItem('cached_repo_url', repoUrl)
@@ -78,29 +139,25 @@ export default function Dashboard({ githubToken }) {
     }
     setLocalPath(folderName);
 
-    // Look for package.json and package-lock.json in selected folder files
-    const pkgFile = files.find(f => f.name.toLowerCase() === 'package.json');
-    const lockFile = files.find(f => f.name.toLowerCase() === 'package-lock.json');
+    // Collect every supported dependency manifest inside the selected folder
+    const manifests = files.filter((f) => isManifestFile(f.name));
 
-    if (!pkgFile && !lockFile) {
-      setScanResult({ error: `No package.json or package-lock.json found in selected folder "${folderName}".` });
+    if (manifests.length === 0) {
+      setScanResult({
+        error: `No supported dependency manifests found in selected folder "${folderName}". Supported files: package.json, package-lock.json, yarn.lock, pnpm-lock.yaml, requirements*.txt, Pipfile, Pipfile.lock, pyproject.toml, poetry.lock, setup.py, setup.cfg, go.mod, Cargo.toml, Cargo.lock, Gemfile, Gemfile.lock, composer.json, composer.lock, pom.xml, packages.config, *.csproj, environment.yml.`
+      });
       return;
     }
 
-    let package_json = null;
-    let package_lock_json = null;
-
+    // Send manifests as raw text — the backend parses each format by type
+    const manifestFiles = {};
     try {
-      if (pkgFile) {
-        const text = await pkgFile.text();
-        package_json = JSON.parse(text);
+      for (const f of manifests.slice(0, 150)) {
+        const rel = f.webkitRelativePath || f.name;
+        manifestFiles[rel] = await f.text();
       }
-      if (lockFile) {
-        const text = await lockFile.text();
-        package_lock_json = JSON.parse(text);
-      }
-    } catch (parseErr) {
-      setScanResult({ error: `Failed to parse manifest JSON files in "${folderName}": ${parseErr.message}` });
+    } catch (readErr) {
+      setScanResult({ error: `Failed to read manifest files in "${folderName}": ${readErr.message}` });
       return;
     }
 
@@ -109,13 +166,13 @@ export default function Dashboard({ githubToken }) {
     setScanResult(null);
     setSelectedFinding(null);
     setScanProgress(15);
-    setScanStage(`Extracted manifest files from "${folderName}". Initiating scan...`);
+    setScanStage(`Found ${manifests.length} dependency manifest(s) in "${folderName}". Initiating scan...`);
 
     try {
       const res = await fetch('http://127.0.0.1:8000/api/scan/manifests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ package_json, package_lock_json, project_name: folderName })
+        body: JSON.stringify({ files: manifestFiles, project_name: folderName })
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -247,7 +304,7 @@ export default function Dashboard({ githubToken }) {
       })
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to initiate local scan. Make sure the path is correct and contains a package.json file.');
+        throw new Error(errorData.detail || 'Failed to initiate local scan. Make sure the path is correct and contains a supported dependency manifest (package.json, requirements.txt, go.mod, pyproject.toml, etc.).');
       }
       const data = await res.json()
       setPollingId(data.scan_id)
@@ -259,6 +316,57 @@ export default function Dashboard({ githubToken }) {
     }
   }
 
+  const toggleRepoDropdown = async () => {
+    if (isRepoDropdownOpen) {
+      setIsRepoDropdownOpen(false)
+      return
+    }
+    if (userRepos) {
+      setReposError('')
+      setIsRepoDropdownOpen(true)
+      return
+    }
+    setReposLoading(true)
+    setReposError('')
+    try {
+      const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner', {
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        throw new Error(res.status === 401 ? 'GitHub token invalid or expired. Please sign in again.' : `Failed to load repositories (${res.status}).`);
+      }
+      const data = await res.json();
+      setUserRepos(data);
+      setIsRepoDropdownOpen(true);
+    } catch (e) {
+      console.error(e)
+      setReposError(e.message || 'Failed to load repositories.');
+      setIsRepoDropdownOpen(true);
+    } finally {
+      setReposLoading(false)
+    }
+  }
+
+  const selectRepo = (repo) => {
+    setRepoUrl(`https://github.com/${repo.full_name}`)
+    setIsRepoDropdownOpen(false)
+  }
+
+  useEffect(() => {
+    if (!isRepoDropdownOpen) return;
+    const onDocClick = (e) => {
+      if (repoDropdownRef.current && !repoDropdownRef.current.contains(e.target)) {
+        setIsRepoDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [isRepoDropdownOpen])
+
   // Realistic incremental progress while scanning is active
   useEffect(() => {
     if (!isScanning) return;
@@ -267,19 +375,22 @@ export default function Dashboard({ githubToken }) {
       setScanProgress((prev) => {
         if (prev < 30) {
           setScanStage('Cloning Git repository...')
-          return prev + 3;
+          return Math.min(prev + 3, 30);
         } else if (prev < 55) {
           setScanStage('Extracting dependencies and package manifests...')
-          return prev + 2;
+          return Math.min(prev + 2, 55);
         } else if (prev < 75) {
           setScanStage('Querying OSV vulnerability intelligence database...')
-          return prev + 1.5;
+          return Math.min(prev + 1.5, 75);
         } else if (prev < 92) {
           setScanStage('Calculating blast radius, topology & risk scores...')
-          return prev + 0.8;
-        } else if (prev < 96) {
+          return Math.min(prev + 0.8, 92);
+        } else if (prev < 98) {
           setScanStage('Finalizing security audit report...')
-          return prev + 0.2;
+          return Math.min(prev + 0.2, 98);
+        } else if (prev < 99.5) {
+          setScanStage('Compiling final security assessment...')
+          return Math.min(prev + 0.05, 99.5);
         }
         return prev;
       })
@@ -290,6 +401,9 @@ export default function Dashboard({ githubToken }) {
 
   useEffect(() => {
     if (!pollingId) return;
+
+    let consecutiveFailures = 0;
+    let stalls = 0;
 
     const interval = setInterval(async () => {
       try {
@@ -312,9 +426,26 @@ export default function Dashboard({ githubToken }) {
           setIsScanning(false)
           setPollingId(null)
           setScanProgress(0)
+        } else {
+          // Still pending/in-progress
+          consecutiveFailures = 0;
+          stalls += 1;
+          if (stalls > 150) {  // ~5 minutes with no status change
+            setScanResult({ error: 'The scan is taking too long. Please check that the backend is running and try again.' })
+            setIsScanning(false)
+            setPollingId(null)
+            setScanProgress(0)
+          }
         }
       } catch (e) {
         console.error(e)
+        consecutiveFailures += 1
+        if (consecutiveFailures >= 6) {  // ~12s of unreachable backend
+          setScanResult({ error: 'Lost connection to the scan backend. Please make sure the backend is running and try again.' })
+          setIsScanning(false)
+          setPollingId(null)
+          setScanProgress(0)
+        }
       }
     }, 2000)
 
@@ -324,7 +455,7 @@ export default function Dashboard({ githubToken }) {
   return (
     <>
       {/* Hero Band */}
-      <section className="bg-canvas-dark py-section px-6 border-b border-hairline-on-dark text-center relative overflow-hidden">
+      <section className="bg-canvas-dark py-section px-6 border-b border-hairline-on-dark text-center relative">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-full opacity-5 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary via-canvas-dark to-canvas-dark"></div>
         
         <div className="max-w-4xl mx-auto relative z-10">
@@ -336,11 +467,12 @@ export default function Dashboard({ githubToken }) {
           </p>
           
           {/* Search Input on Dark */}
-          <div className="max-w-2xl mx-auto flex items-center bg-surface-card-dark rounded-lg p-2 border border-hairline-on-dark shadow-2xl">
+          <div className="max-w-2xl mx-auto flex items-center bg-surface-card-dark rounded-lg p-2 border border-hairline-on-dark shadow-2xl relative">
             <div className="pl-4 pr-2 text-muted-strong">
               <Globe size={20} />
             </div>
             <input 
+              id="repo-input"
               type="text" 
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
@@ -348,6 +480,67 @@ export default function Dashboard({ githubToken }) {
               className="flex-1 bg-transparent text-body-md text-on-dark placeholder-muted-strong outline-none px-2 py-2"
               onKeyDown={(e) => e.key === 'Enter' && repoUrl && handleScan()}
             />
+            <div ref={repoDropdownRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={toggleRepoDropdown}
+                disabled={isScanning}
+                title="My Repositories"
+                className="p-2 text-muted-strong hover:text-primary transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <CaretDown size={18} className={`transition-transform duration-200 ${isRepoDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isRepoDropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 w-[26rem] max-w-[calc(100vw-4rem)] bg-surface-card-dark border border-hairline-on-dark rounded-lg shadow-2xl z-50 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-hairline-on-dark flex items-center justify-between">
+                    <span className="text-body-sm font-medium text-on-dark">My Repositories</span>
+                    {userRepos && !reposLoading && (
+                      <span className="text-caption text-muted">{userRepos.length}</span>
+                    )}
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {reposLoading && (
+                      <div className="px-4 py-3 text-body-sm text-muted flex items-center gap-2">
+                        <Pulse size={16} className="animate-pulse" /> Loading repositories...
+                      </div>
+                    )}
+                    {reposError && (
+                      <div className="px-4 py-3 text-body-sm text-trading-down">{reposError}</div>
+                    )}
+                    {userRepos && userRepos.length === 0 && !reposLoading && !reposError && (
+                      <div className="px-4 py-3 text-body-sm text-muted">
+                        No repositories found.
+                      </div>
+                    )}
+                    {userRepos && userRepos.length > 0 && userRepos.map((repo) => (
+                      <button
+                        key={repo.id}
+                        type="button"
+                        onClick={() => selectRepo(repo)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-surface-elevated-dark transition-colors flex items-center gap-3 border-b border-hairline-on-dark/40 last:border-0 cursor-pointer"
+                      >
+                        <div className="w-7 h-7 rounded-md bg-surface-elevated-dark flex items-center justify-center text-muted shrink-0">
+                          <GitBranch size={14} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-body-sm text-on-dark truncate font-medium">{repo.full_name}</div>
+                          {repo.description && (
+                            <div className="text-caption text-muted truncate">{repo.description}</div>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="text-caption text-muted">{repo.language || '—'}</span>
+                          <span className={`text-caption ${repo.private ? 'text-muted-strong' : 'text-trading-up'}`}>
+                            {repo.private ? 'Private' : 'Public'}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <button 
               onClick={handleScan}
               disabled={isScanning || !repoUrl}
@@ -355,11 +548,11 @@ export default function Dashboard({ githubToken }) {
             >
               {isScanning ? (
                 <>
-                  <Activity size={16} className="animate-pulse" /> Scanning...
+                  <Pulse size={16} className="animate-pulse" /> Scanning...
                 </>
               ) : (
                 <>
-                  <Zap size={16} /> Scan Now
+                  <Lightning size={16} /> Scan Now
                 </>
               )}
             </button>
@@ -433,7 +626,7 @@ export default function Dashboard({ githubToken }) {
               <div className="relative z-10 flex flex-col items-center text-center">
                 <div className="relative mb-5">
                   <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shadow-lg shadow-primary/20">
-                    <Activity size={32} className="animate-spin text-primary" style={{ animationDuration: '3s' }} />
+                    <Pulse size={32} className="animate-spin text-primary" style={{ animationDuration: '3s' }} />
                   </div>
                   <div className="absolute -inset-1 rounded-2xl bg-primary/20 blur-md -z-10 animate-pulse"></div>
                 </div>
@@ -491,7 +684,7 @@ export default function Dashboard({ githubToken }) {
             </div>
           ) : scanResult?.error ? (
             <div className="bg-surface-card-dark border border-trading-down rounded-xl p-8 text-center max-w-2xl mx-auto">
-              <ShieldAlert className="w-16 h-16 text-trading-down mx-auto mb-4 opacity-50" />
+              <Warning className="w-16 h-16 text-trading-down mx-auto mb-4 opacity-50" />
               <h3 className="text-title-lg text-trading-down mb-2">Analysis Failed</h3>
               <p className="text-body-md text-muted">{scanResult.error}</p>
             </div>
@@ -554,7 +747,7 @@ export default function Dashboard({ githubToken }) {
                         className="grid grid-cols-12 gap-4 items-center py-3 px-2 rounded-lg hover:bg-surface-elevated-dark transition-colors cursor-pointer group border-b border-hairline-on-dark last:border-0"
                       >
                         <div className="col-span-5 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-surface-elevated-dark flex items-center justify-center font-plex text-xs text-primary">npm</div>
+                          <div className="h-6 px-2.5 rounded-full bg-surface-elevated-dark flex items-center justify-center font-plex text-xs text-primary truncate shrink-0 max-w-[90px]" title={(dep.ecosystem || 'npm')}>{dep.ecosystem || 'npm'}</div>
                           <span className="text-number-md text-on-dark truncate" title={dep.id}>{dep.id}</span>
                         </div>
                         <div className="col-span-3 text-right font-plex text-number-md">

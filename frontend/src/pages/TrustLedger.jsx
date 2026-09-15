@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShieldCheck, Link as LinkIcon, Clock, Hash, Lock, CheckCircle, XCircle } from 'lucide-react';
+import { ShieldCheck, LinkSimple as LinkIcon, Clock, Hash, Lock, CheckCircle, XCircle } from '@phosphor-icons/react';
 
 export default function TrustLedger() {
   const [blocks, setBlocks] = useState([]);

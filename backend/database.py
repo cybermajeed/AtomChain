@@ -34,6 +34,7 @@ class Finding(Base):
     risk_score = Column(Float)
     confidence = Column(Float)
     finding_type = Column(String) # CONFIRMED_VULNERABILITY, SUSPICIOUS_SIGNAL, ANOMALY
+    ecosystem = Column(String, nullable=True, default="npm") # OSV ecosystem (npm, PyPI, Go, ...)
     insight = Column(String)
     summary = Column(String, nullable=True)       # Human-readable OSV summary for AI context
     is_reviewed = Column(Integer, default=0)
@@ -66,7 +67,8 @@ def _auto_migrate():
                 "insight": "VARCHAR",
                 "summary": "VARCHAR",
                 "is_reviewed": "INTEGER DEFAULT 0",
-                "decision": "VARCHAR DEFAULT 'PENDING'"
+                "decision": "VARCHAR DEFAULT 'PENDING'",
+                "ecosystem": "VARCHAR DEFAULT 'npm'"
             }.items():
                 if col_name not in existing_findings_cols:
                     conn.execute(text(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}"))

@@ -3,6 +3,8 @@ import subprocess
 import tempfile
 import shutil
 import urllib.parse
+import urllib.request as urlrequest
+import tarfile
 
 class GitManager:
     def __init__(self):
@@ -39,10 +41,7 @@ class GitManager:
         if branch:
             api_url += f"/{branch}"
 
-        import urllib.request
-        import tarfile
-
-        req = urllib.request.Request(api_url)
+        req = urlrequest.Request(api_url)
         if github_token:
             req.add_header("Authorization", f"token {github_token}")
         req.add_header("User-Agent", "AtomChain-Scanner")
@@ -50,7 +49,7 @@ class GitManager:
 
         tar_path = os.path.join(temp_dir, "repo.tar.gz")
         try:
-            with urllib.request.urlopen(req, timeout=30) as response, open(tar_path, 'wb') as out_file:
+            with urlrequest.urlopen(req, timeout=30) as response, open(tar_path, 'wb') as out_file:
                 shutil.copyfileobj(response, out_file)
             
             with tarfile.open(tar_path, "r:gz") as tar:

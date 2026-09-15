@@ -1,4 +1,5 @@
 import httpx
+import concurrent.futures
 from typing import Dict, Any, List
 
 class OSVClient:
@@ -57,21 +58,17 @@ class OSVClient:
                 
                 # The /v1/querybatch endpoint only returns 'id' and 'modified'.
                 # We need to fetch the full details for any vulnerabilities found.
+                # Fetch details concurrently to keep the scan fast on large lists.
                 results = []
                 for result in data.get("results", []):
-                    full_vulns = []
-                    for min_vuln in result.get("vulns", []):
-                        vuln_id = min_vuln.get("id")
-                        try:
-                            # Fetch full vuln detail
-                            detail_res = client.get(f"https://api.osv.dev/v1/vulns/{vuln_id}")
-                            if detail_res.status_code == 200:
-                                full_vulns.append(detail_res.json())
-                            else:
-                                full_vulns.append(min_vuln) # Fallback to minimal
-                        except Exception as fetch_err:
-                            print(f"Failed to fetch full detail for {vuln_id}: {fetch_err}")
-                            full_vulns.append(min_vuln)
+                    min_vulns = result.get("vulns", [])
+                    vuln_ids = [v.get("id") for v in min_vulns]
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+                        fetched = list(pool.map(lambda vid: self._fetch_vuln_detail(client, vid), vuln_ids))
+                    full_vulns = [
+                        fetched_detail if fetched_detail is not None else min_vuln
+                        for fetched_detail, min_vuln in zip(fetched, min_vulns)
+                    ]
                     results.append(full_vulns)
                 
                 return results
@@ -79,6 +76,16 @@ class OSVClient:
             print(f"Error executing OSV batch query: {e}")
             # Fallback to empty results
             return [[] for _ in packages]
+
+    def _fetch_vuln_detail(self, client: httpx.Client, vuln_id: str) -> Any:
+        """Fetches the full OSV record for a vulnerability id. Returns None on failure."""
+        try:
+            detail_res = client.get(f"https://api.osv.dev/v1/vulns/{vuln_id}")
+            if detail_res.status_code == 200:
+                return detail_res.json()
+        except Exception as fetch_err:
+            print(f"Failed to fetch full detail for {vuln_id}: {fetch_err}")
+        return None
 
     def format_vulnerability(self, vuln_data: dict) -> dict:
         """

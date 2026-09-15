@@ -11,17 +11,17 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
-import { Package, ShieldAlert, ShieldCheck, Box } from 'lucide-react';
+import { Package, Warning, ShieldCheck, Cube } from '@phosphor-icons/react';
 
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-const nodeWidth = 240;
-const nodeHeight = 80;
+const nodeWidth = 180;
+const nodeHeight = 50;
 
-const getLayoutedElements = (nodes, edges, direction = 'TB') => {
+const getLayoutedElements = (nodes, edges, direction = 'LR') => {
   const isHorizontal = direction === 'LR';
-  dagreGraph.setGraph({ rankdir: direction, ranksep: 80, nodesep: 50 });
+  dagreGraph.setGraph({ rankdir: direction, ranksep: 100, nodesep: 30 });
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
@@ -65,29 +65,29 @@ const CustomPackageNode = ({ data }) => {
     borderColor = 'border-trading-down/50';
     shadowColor = 'shadow-trading-down/10';
     bgColor = 'bg-trading-down/10';
-    Icon = ShieldAlert;
+    Icon = Warning;
     textColor = 'text-trading-down';
   } else if (data.risk === 'MEDIUM' || data.risk === 'MODERATE' || isRoot) {
     borderColor = 'border-[#FCD535]/50';
     shadowColor = 'shadow-[#FCD535]/10';
     bgColor = 'bg-[#FCD535]/10';
-    Icon = isRoot ? Box : Package;
+    Icon = isRoot ? Cube : Package;
     textColor = 'text-[#FCD535]';
   }
 
   return (
-    <div className={`px-4 py-3 shadow-lg rounded-xl border bg-surface-card-dark/80 backdrop-blur-md ${borderColor} ${shadowColor} flex items-center gap-3 w-[240px]`}>
-      <Handle type="target" position={Position.Top} className="w-2 h-2 !bg-muted-strong !border-none" />
-      <div className={`p-2 rounded-lg ${bgColor}`}>
-        <Icon size={20} className={textColor} />
+    <div className={`px-3 py-2 shadow-md rounded-lg border bg-surface-card-dark/95 backdrop-blur-md ${borderColor} flex items-center gap-2 w-[180px] hover:border-muted-strong transition-colors`}>
+      <Handle type="target" position={Position.Left} className="w-1.5 h-1.5 !bg-muted-strong !border-none" />
+      <div className={`p-1.5 rounded-md ${bgColor}`}>
+        <Icon size={14} className={textColor} />
       </div>
       <div className="flex flex-col overflow-hidden w-full">
-        <span className="text-body-sm font-semibold text-on-dark truncate" title={data.label}>{data.label}</span>
+        <span className="text-xs font-bold text-on-dark truncate leading-tight" title={data.label}>{data.label}</span>
         {!isRoot && (
-          <span className="text-[11px] font-plex text-muted truncate">{data.version || 'Unknown version'}</span>
+          <span className="text-[10px] font-plex text-muted truncate leading-tight">{data.version || 'Unknown'}</span>
         )}
       </div>
-      <Handle type="source" position={Position.Bottom} className="w-2 h-2 !bg-muted-strong !border-none" />
+      <Handle type="source" position={Position.Right} className="w-1.5 h-1.5 !bg-muted-strong !border-none" />
     </div>
   );
 };
@@ -169,7 +169,7 @@ export default function DependencyGraph({ dependencies }) {
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       initialNodes,
       initialEdges,
-      'TB'
+      'LR'
     );
 
     setNodes(layoutedNodes);

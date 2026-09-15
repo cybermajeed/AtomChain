@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Brain, Search, Loader2, AlertTriangle, ChevronDown, ChevronUp,
-  ExternalLink, ShieldCheck, ShieldAlert, Zap, ArrowRight, CheckCircle,
-  CircleHelp, Info, BarChart2, GitFork, Check, PieChart, Activity, Clock, Shield
-} from 'lucide-react'
+  ArrowLeft, Brain, MagnifyingGlass, CircleNotch, Warning, CaretDown, CaretUp,
+  ArrowSquareOut, ShieldCheck, Lightning, ArrowRight, CheckCircle,
+  Question, Info, ChartBar, GitFork, Check, ChartPie, Pulse, Clock, Shield
+} from '@phosphor-icons/react'
 import ReactMarkdown from 'react-markdown'
 import DependencyGraph from '../components/DependencyGraph'
 
@@ -42,7 +42,7 @@ const confidenceBadge = (level) => {
 
 // ─── SVG Pie / Donut Chart ───────────────────────────────────────────────────
 
-function VulnerabilityPieChart({ score = 75, severity = 'HIGH' }) {
+function VulnerabilityChartPie({ score = 75, severity = 'HIGH' }) {
   const sevUpper = (severity || 'HIGH').toUpperCase()
   const baseColor = sevUpper === 'CRITICAL' || sevUpper === 'HIGH' ? '#FF4D4D' : sevUpper === 'MODERATE' || sevUpper === 'MEDIUM' ? '#FCD535' : '#00E676'
   
@@ -195,8 +195,8 @@ function VulnerabilityHistoryGraph({ version = '1.0.0', vulnId = 'CVE-2021-23337
                   style={{ borderColor: node.color }}
                 >
                   {node.type === 'SAFE' && <Check size={18} style={{ color: node.color }} />}
-                  {node.type === 'VULNERABLE' && <AlertTriangle size={18} style={{ color: node.color }} />}
-                  {node.type === 'INSTALLED' && <Activity size={18} className="animate-pulse" style={{ color: node.color }} />}
+                  {node.type === 'VULNERABLE' && <Warning size={18} style={{ color: node.color }} />}
+                  {node.type === 'INSTALLED' && <Pulse size={18} className="animate-pulse" style={{ color: node.color }} />}
                   {node.type === 'PATCHED' && <ShieldCheck size={18} style={{ color: node.color }} />}
                 </div>
 
@@ -246,7 +246,7 @@ function CollapsibleSection({ title, icon: Icon, children, defaultOpen = true })
           {Icon && <Icon size={16} className="text-primary" />}
           <span className="text-body-md font-medium text-on-dark">{title}</span>
         </div>
-        {open ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
+        {open ? <CaretUp size={16} className="text-muted" /> : <CaretDown size={16} className="text-muted" />}
       </button>
       {open && <div className="px-5 py-4 bg-surface-card-dark">{children}</div>}
     </div>
@@ -268,13 +268,13 @@ function QuickQuestion({ label, onClick, disabled }) {
 function LoadingSteps({ step }) {
   const steps = [
     'Collecting security context...',
-    'Searching security intelligence...',
+    'MagnifyingGlassing security intelligence...',
     'Filtering authoritative sources...',
     'Generating AI assessment...',
   ]
   return (
     <div className="py-10 flex flex-col items-center gap-4 bg-surface-card-dark border border-hairline-on-dark rounded-xl">
-      <Loader2 size={36} className="text-primary animate-spin" />
+      <CircleNotch size={36} className="text-primary animate-spin" />
       <div className="text-center">
         <p className="text-body-md text-on-dark font-medium">{steps[step % steps.length]}</p>
         <p className="text-caption text-muted mt-1">Powered by Groq · llama-3.3-70b</p>
@@ -340,7 +340,7 @@ function AnalysisResult({ analysis, finding }) {
       {needsReview && (
         <div className="p-4 bg-trading-down/10 border border-trading-down/30 rounded-xl flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
-            <ShieldAlert size={18} className="text-trading-down" />
+            <Warning size={18} className="text-trading-down" />
             <span className="text-body-sm font-medium text-trading-down">Suspicious Finding / Authorization Required</span>
           </div>
           <button 
@@ -365,7 +365,7 @@ function AnalysisResult({ analysis, finding }) {
         </div>
         {research_used && (
           <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-hairline-on-dark">
-            <Search size={13} className="text-accent-turquoise" />
+            <MagnifyingGlass size={13} className="text-accent-turquoise" />
             <span className="text-caption text-accent-turquoise font-medium">External Tavily security research integrated</span>
           </div>
         )}
@@ -411,14 +411,14 @@ function AnalysisResult({ analysis, finding }) {
 
       {/* Impact */}
       {impactText && (
-        <CollapsibleSection title="Blast Radius & Impact" icon={ShieldAlert} defaultOpen={false}>
+        <CollapsibleSection title="Blast Radius & Impact" icon={Warning} defaultOpen={false}>
           <p className="text-body-sm text-body leading-relaxed">{impactText}</p>
         </CollapsibleSection>
       )}
 
       {/* Recommendation */}
       {recommendation && (
-        <CollapsibleSection title="Recommended Remediation" icon={Zap}>
+        <CollapsibleSection title="Recommended Remediation" icon={Lightning}>
           <div className="space-y-3">
             <div className="flex items-center gap-3 flex-wrap">
               <span className={`text-caption px-2.5 py-1 rounded-pill uppercase font-semibold ${priorityBadge(recommendation.priority)}`}>
@@ -450,11 +450,11 @@ function AnalysisResult({ analysis, finding }) {
 
       {/* Uncertainty */}
       {uncertaintyList.length > 0 && (
-        <CollapsibleSection title="Uncertainties & Warnings" icon={CircleHelp} defaultOpen={false}>
+        <CollapsibleSection title="Uncertainties & Warnings" icon={Question} defaultOpen={false}>
           <ul className="space-y-2">
             {uncertaintyList.map((u, i) => (
               <li key={i} className="flex items-start gap-2 text-body-sm text-muted">
-                <AlertTriangle size={14} className="text-primary mt-0.5 shrink-0" />
+                <Warning size={14} className="text-primary mt-0.5 shrink-0" />
                 <span>{typeof u === 'string' ? u : JSON.stringify(u)}</span>
               </li>
             ))}
@@ -464,7 +464,7 @@ function AnalysisResult({ analysis, finding }) {
 
       {/* Sources */}
       {sourcesList.length > 0 && (
-        <CollapsibleSection title={`Real-time Tavily Search & OSV Sources (${sourcesList.length})`} icon={Search} defaultOpen={true}>
+        <CollapsibleSection title={`Real-time Tavily MagnifyingGlass & OSV Sources (${sourcesList.length})`} icon={MagnifyingGlass} defaultOpen={true}>
           <ul className="space-y-3">
             {sourcesList.map((s, i) => (
               <li key={i} className="flex items-start gap-2.5 bg-surface-elevated-dark p-3 rounded-lg border border-hairline-on-dark">
@@ -477,7 +477,7 @@ function AnalysisResult({ analysis, finding }) {
                     rel="noopener noreferrer"
                     className="text-caption text-accent-turquoise hover:underline flex items-center gap-1 mt-0.5 truncate"
                   >
-                    <ExternalLink size={12} />
+                    <ArrowSquareOut size={12} />
                     {s.url}
                   </a>
                   {s.authority && (
@@ -589,7 +589,7 @@ export default function FindingDetailPage() {
   if (pageLoading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center py-20 bg-canvas-dark text-on-dark">
-        <Loader2 size={32} className="text-primary animate-spin mb-4" />
+        <CircleNotch size={32} className="text-primary animate-spin mb-4" />
         <p className="text-body-md text-muted font-medium">Loading vulnerability details...</p>
       </div>
     )
@@ -598,7 +598,7 @@ export default function FindingDetailPage() {
   if (!finding) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center py-20 bg-canvas-dark text-on-dark px-6">
-        <ShieldAlert size={48} className="text-trading-down mb-4 opacity-60" />
+        <Warning size={48} className="text-trading-down mb-4 opacity-60" />
         <h2 className="text-title-lg text-on-dark mb-2">Vulnerability Finding Not Found</h2>
         <p className="text-body-md text-muted mb-6">The requested vulnerability finding #{findingId} could not be loaded.</p>
         <Link to="/dashboard" className="px-6 py-2.5 bg-primary text-ink font-button rounded-pill hover:bg-primary-active transition-colors flex items-center gap-2">
@@ -670,7 +670,7 @@ export default function FindingDetailPage() {
             className={`py-3.5 text-body-md font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-on-dark'}`}
             onClick={() => setActiveTab('overview')}
           >
-            <BarChart2 size={16} /> Overview & Remediation
+            <ChartBar size={16} /> Overview & Remediation
           </button>
           <button
             className={`py-3.5 text-body-md font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'tree' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-on-dark'}`}
@@ -711,9 +711,9 @@ export default function FindingDetailPage() {
               {/* Vulnerability Pie Chart Breakdown */}
               <div className="bg-surface-card-dark rounded-2xl p-6 border border-hairline-on-dark shadow-xl">
                 <h3 className="text-title-sm text-on-dark mb-4 flex items-center gap-2">
-                  <PieChart size={16} className="text-primary" /> Risk Component Pie Distribution
+                  <ChartPie size={16} className="text-primary" /> Risk Component Pie Distribution
                 </h3>
-                <VulnerabilityPieChart score={riskScoreVal} severity={severityVal} />
+                <VulnerabilityChartPie score={riskScoreVal} severity={severityVal} />
               </div>
 
               {/* Vulnerability History Map & Lifecycle Graph */}
@@ -751,7 +751,7 @@ export default function FindingDetailPage() {
               {error && !loading && (
                 <div className="p-5 bg-trading-down/10 border border-trading-down/30 rounded-2xl">
                   <div className="flex items-start gap-3">
-                    <AlertTriangle size={20} className="text-trading-down mt-0.5 shrink-0" />
+                    <Warning size={20} className="text-trading-down mt-0.5 shrink-0" />
                     <div>
                       <p className="text-body-md font-semibold text-trading-down">AI Assessment Error</p>
                       <p className="text-body-sm text-muted mt-1">{String(error)}</p>
@@ -775,7 +775,7 @@ export default function FindingDetailPage() {
                     onClick={() => runAnalysis('vulnerability')}
                     className="h-10 px-8 rounded-pill bg-primary hover:bg-primary-active text-ink font-button transition-colors inline-flex items-center gap-2"
                   >
-                    <Zap size={16} /> Start AI Security Assessment
+                    <Lightning size={16} /> Start AI Security Assessment
                   </button>
                 </div>
               )}

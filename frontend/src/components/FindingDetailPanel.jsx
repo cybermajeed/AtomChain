@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, Component } from 'react'
 import {
-  X, Brain, Search, Loader2, AlertTriangle, ChevronDown, ChevronUp,
-  ExternalLink, ShieldCheck, ShieldAlert, Zap, ArrowRight, CheckCircle,
-  CircleHelp, Info
-} from 'lucide-react'
+  X, Brain, MagnifyingGlass, CircleNotch, Warning, CaretDown, CaretUp,
+  ArrowSquareOut, ShieldCheck, Lightning, ArrowRight, CheckCircle,
+  Question, Info
+} from '@phosphor-icons/react'
 import ReactMarkdown from 'react-markdown'
 import DependencyGraph from './DependencyGraph'
 
@@ -29,7 +29,7 @@ class FindingPanelErrorBoundary extends Component {
           <div className="fixed right-0 top-0 h-full w-full max-w-[800px] bg-canvas-dark border-l border-hairline-on-dark z-40 p-6 flex flex-col shadow-2xl overflow-y-auto" role="dialog">
             <div className="flex justify-between items-center mb-6 border-b border-hairline-on-dark pb-4">
               <div className="flex items-center gap-2">
-                <AlertTriangle size={20} className="text-trading-down" />
+                <Warning size={20} className="text-trading-down" />
                 <h3 className="text-title-md text-on-dark">Analysis View Error</h3>
               </div>
               <button onClick={this.props.onClose} className="p-2 text-muted hover:text-on-dark rounded-lg hover:bg-surface-elevated-dark transition-colors">
@@ -100,7 +100,7 @@ function CollapsibleSection({ title, icon: Icon, children, defaultOpen = true })
           {Icon && <Icon size={14} className="text-primary" />}
           <span className="text-body-sm font-medium text-on-dark">{title}</span>
         </div>
-        {open ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
+        {open ? <CaretUp size={14} className="text-muted" /> : <CaretDown size={14} className="text-muted" />}
       </button>
       {open && <div className="px-4 py-3 bg-surface-card-dark">{children}</div>}
     </div>
@@ -122,13 +122,13 @@ function QuickQuestion({ label, onClick, disabled }) {
 function LoadingSteps({ step }) {
   const steps = [
     'Collecting security context...',
-    'Searching security intelligence...',
+    'MagnifyingGlassing security intelligence...',
     'Filtering authoritative sources...',
     'Generating AI assessment...',
   ]
   return (
     <div className="py-8 flex flex-col items-center gap-4">
-      <Loader2 size={32} className="text-primary animate-spin" />
+      <CircleNotch size={32} className="text-primary animate-spin" />
       <div className="text-center">
         <p className="text-body-sm text-on-dark font-medium">{steps[step % steps.length]}</p>
         <p className="text-caption text-muted mt-1">Powered by Groq · llama-3.3-70b</p>
@@ -194,7 +194,7 @@ function AnalysisResult({ analysis, finding }) {
       {needsReview && (
         <div className="p-3 bg-trading-down/10 border border-trading-down/30 rounded-lg flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShieldAlert size={14} className="text-trading-down" />
+            <Warning size={14} className="text-trading-down" />
             <span className="text-body-sm font-medium text-trading-down">Suspicious Finding / Authorization Required</span>
           </div>
           <button 
@@ -219,7 +219,7 @@ function AnalysisResult({ analysis, finding }) {
         </div>
         {research_used && (
           <div className="flex items-center gap-1 mt-3 pt-3 border-t border-hairline-on-dark">
-            <Search size={11} className="text-accent-turquoise" />
+            <MagnifyingGlass size={11} className="text-accent-turquoise" />
             <span className="text-caption text-accent-turquoise">External research used</span>
           </div>
         )}
@@ -265,14 +265,14 @@ function AnalysisResult({ analysis, finding }) {
 
       {/* Impact */}
       {impactText && (
-        <CollapsibleSection title="Impact" icon={ShieldAlert} defaultOpen={false}>
+        <CollapsibleSection title="Impact" icon={Warning} defaultOpen={false}>
           <p className="text-body-sm text-body leading-relaxed">{impactText}</p>
         </CollapsibleSection>
       )}
 
       {/* Recommendation */}
       {recommendation && (
-        <CollapsibleSection title="Recommendation" icon={Zap}>
+        <CollapsibleSection title="Recommendation" icon={Lightning}>
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`text-caption px-2 py-0.5 rounded-pill uppercase font-medium ${priorityBadge(recommendation.priority)}`}>
@@ -304,11 +304,11 @@ function AnalysisResult({ analysis, finding }) {
 
       {/* Uncertainty */}
       {uncertaintyList.length > 0 && (
-        <CollapsibleSection title="Uncertainty" icon={CircleHelp} defaultOpen={false}>
+        <CollapsibleSection title="Uncertainty" icon={Question} defaultOpen={false}>
           <ul className="space-y-1.5">
             {uncertaintyList.map((u, i) => (
               <li key={i} className="flex items-start gap-2 text-body-sm text-muted">
-                <AlertTriangle size={12} className="text-primary mt-0.5 shrink-0" />
+                <Warning size={12} className="text-primary mt-0.5 shrink-0" />
                 {typeof u === 'string' ? u : JSON.stringify(u)}
               </li>
             ))}
@@ -318,7 +318,7 @@ function AnalysisResult({ analysis, finding }) {
 
       {/* Sources */}
       {sourcesList.length > 0 && (
-        <CollapsibleSection title={`Real-time Tavily Search & OSV Sources (${sourcesList.length})`} icon={Search} defaultOpen={true}>
+        <CollapsibleSection title={`Real-time Tavily MagnifyingGlass & OSV Sources (${sourcesList.length})`} icon={MagnifyingGlass} defaultOpen={true}>
           <ul className="space-y-2">
             {sourcesList.map((s, i) => (
               <li key={i} className="flex items-start gap-2">
@@ -331,7 +331,7 @@ function AnalysisResult({ analysis, finding }) {
                     rel="noopener noreferrer"
                     className="text-caption text-accent-turquoise hover:underline flex items-center gap-1 truncate"
                   >
-                    <ExternalLink size={10} />
+                    <ArrowSquareOut size={10} />
                     {s.url}
                   </a>
                   {s.authority && (
@@ -445,8 +445,8 @@ function FindingDetailPanelInner({ finding, dependencies, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-hairline-on-dark shrink-0 bg-surface-dark">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-surface-elevated-dark flex items-center justify-center text-body-sm font-plex text-primary shrink-0">
-              npm
+            <div className="min-w-10 h-10 px-2 rounded-lg bg-surface-elevated-dark flex items-center justify-center text-body-sm font-plex text-primary shrink-0" title={finding.ecosystem || 'npm'}>
+              {finding.ecosystem || 'npm'}
             </div>
             <div>
               <h2 className="text-title-md text-on-dark truncate max-w-[500px]">
@@ -530,7 +530,7 @@ function FindingDetailPanelInner({ finding, dependencies, onClose }) {
           {error && !loading && (
             <div className="p-4 bg-trading-down/10 border border-trading-down/30 rounded-lg">
               <div className="flex items-start gap-2">
-                <AlertTriangle size={16} className="text-trading-down mt-0.5 shrink-0" />
+                <Warning size={16} className="text-trading-down mt-0.5 shrink-0" />
                 <div>
                   <p className="text-body-sm font-medium text-trading-down">Analysis Failed</p>
                   <p className="text-body-sm text-muted mt-1">{String(error)}</p>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShieldAlert, KeyRound } from "lucide-react";
+import { Warning, Key } from "@phosphor-icons/react";
 
 export default function Login({ setToken }) {
   const [authError, setAuthError] = useState("");
@@ -41,7 +41,7 @@ export default function Login({ setToken }) {
       <div className="max-w-md w-full bg-surface-card-dark rounded-xl p-8 border border-hairline-on-dark shadow-2xl relative z-10 text-center">
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 bg-surface-elevated-dark rounded-full flex items-center justify-center text-on-dark">
-            <KeyRound size={32} />
+            <Key size={32} />
           </div>
         </div>
 
@@ -63,12 +63,12 @@ export default function Login({ setToken }) {
           onClick={handleGitHubLogin}
           className="w-full h-12 flex items-center justify-center gap-2 rounded-md font-button text-on-primary bg-primary hover:bg-primary-active transition-colors"
         >
-          <KeyRound size={20} />
+          <Key size={20} />
           Sign In with GitHub
         </button>
 
         <div className="mt-6 flex items-start gap-3 p-4 bg-surface-elevated-dark rounded-lg text-left">
-          <ShieldAlert className="text-muted shrink-0 mt-0.5" size={18} />
+          <Warning className="text-muted shrink-0 mt-0.5" size={18} />
           <p className="text-caption text-muted">
             AtomChain operates entirely locally on your machine. Your OAuth
             token is stored securely in your browser and is never sent to any

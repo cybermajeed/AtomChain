@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  Brain, Send, Loader2, AlertTriangle, ShieldCheck, Sparkles,
-  RefreshCw, MessageCircle, Info
-} from 'lucide-react'
+  Brain, PaperPlaneRight, CircleNotch, Warning, StarFour,
+  ArrowsClockwise, ChatCircle, Info
+} from '@phosphor-icons/react'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -229,7 +229,7 @@ export default function Investigator() {
             <div>
               <h1 className="text-title-md text-on-dark">AI Investigator</h1>
               <div className="flex items-center gap-1.5">
-                <Sparkles size={11} className="text-primary" />
+                <StarFour size={11} className="text-primary" />
                 <span className="text-caption text-muted">Groq · gpt-oss-120b</span>
               </div>
             </div>
@@ -238,7 +238,7 @@ export default function Investigator() {
             onClick={resetConversation}
             className="flex items-center gap-1.5 text-body-sm text-muted hover:text-on-dark transition-colors"
           >
-            <RefreshCw size={14} />
+            <ArrowsClockwise size={14} />
             Clear
           </button>
         </div>
@@ -286,12 +286,12 @@ export default function Investigator() {
         <div className="max-w-4xl mx-auto">
           {error && (
             <div className="flex items-center gap-2 mb-2 text-caption text-trading-down">
-              <AlertTriangle size={12} />
+              <Warning size={12} />
               {error}
             </div>
           )}
           <div className="flex items-end gap-3 bg-surface-card-dark border border-hairline-on-dark rounded-xl p-3">
-            <MessageCircle size={16} className="text-muted shrink-0 mb-0.5" />
+            <ChatCircle size={16} className="text-muted shrink-0 mb-0.5" />
             <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -307,8 +307,8 @@ export default function Investigator() {
               className="w-8 h-8 rounded-lg bg-primary hover:bg-primary-active disabled:bg-primary-disabled disabled:text-muted flex items-center justify-center shrink-0 transition-colors"
             >
               {loading
-                ? <Loader2 size={14} className="text-ink animate-spin" />
-                : <Send size={14} className="text-ink" />
+                ? <CircleNotch size={14} className="text-ink animate-spin" />
+                : <PaperPlaneRight size={14} className="text-ink" />
               }
             </button>
           </div>

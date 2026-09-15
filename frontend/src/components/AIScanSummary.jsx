@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Brain, Loader2, AlertTriangle, Sparkles } from 'lucide-react'
+import { Brain, CircleNotch, Warning, StarFour } from '@phosphor-icons/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -71,21 +71,21 @@ export default function AIScanSummary({ scanId }) {
           <span className="text-body-sm font-medium text-on-dark">AI Assessment</span>
         </div>
         <div className="flex items-center gap-1">
-          <Sparkles size={12} className="text-primary" />
+          <StarFour size={12} className="text-primary" />
           <span className="text-caption text-muted">Groq · gpt-oss-120b</span>
         </div>
       </div>
 
       {loading && (
         <div className="flex items-center gap-2 py-2">
-          <Loader2 size={14} className="text-primary animate-spin" />
+          <CircleNotch size={14} className="text-primary animate-spin" />
           <span className="text-body-sm text-muted">Generating AI assessment...</span>
         </div>
       )}
 
       {error && !loading && (
         <div className="flex items-start gap-2 py-1">
-          <AlertTriangle size={13} className="text-muted mt-0.5 shrink-0" />
+          <Warning size={13} className="text-muted mt-0.5 shrink-0" />
           <p className="text-body-sm text-muted">{error}</p>
         </div>
       )}
