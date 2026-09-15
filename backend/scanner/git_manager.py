@@ -43,9 +43,13 @@ class GitManager:
                 check=True,
                 capture_output=True,
                 text=True,
-                env=env
+                env=env,
+                timeout=120,   # 2-minute cap — prevents indefinite hang on network issues
             )
             return temp_dir
+        except subprocess.TimeoutExpired:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise Exception("Repository clone timed out after 120 seconds. Check your internet connection or try again.")
         except subprocess.CalledProcessError as e:
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise Exception(f"Failed to clone repository: {e.stderr}")

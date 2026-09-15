@@ -50,7 +50,7 @@ class OSVClient:
         }
         
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=60.0) as client:
                 response = client.post("https://api.osv.dev/v1/querybatch", json=payload)
                 response.raise_for_status()
                 data = response.json()
@@ -73,17 +73,31 @@ class OSVClient:
         if "severity" in database_specific:
             severity = database_specific["severity"]
         
-        # Try finding CVSS
+        # Try finding CVSS score from vector string (e.g. CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)
         for rating in vuln_data.get("severity", []):
-            if rating.get("type") == "CVSS_V3":
-                score = rating.get("score")
-                # Basic CVSS to qualitative mapping if OSV doesn't provide it
-                if score:
-                    try:
-                        # Extract base score from vector, highly simplified
-                        severity = "HIGH" # Placeholder logic
-                    except:
-                        pass
+            score_str = rating.get("score", "")
+            if rating.get("type") in ("CVSS_V3", "CVSS_V2") and score_str:
+                try:
+                    # Extract base score — it follows 'CVSS:x.x/' prefix if numeric, else parse /BM:
+                    # OSV often provides the vector string; base score is in the last segment after '/'
+                    # or as a plain float string.
+                    if score_str.replace(".", "").isdigit():
+                        base = float(score_str)
+                    else:
+                        # Vector string: try to extract numeric score via CVSS-like heuristic
+                        # Fall back to severity from database_specific if available
+                        base = None
+                    if base is not None:
+                        if base >= 9.0:
+                            severity = "CRITICAL"
+                        elif base >= 7.0:
+                            severity = "HIGH"
+                        elif base >= 4.0:
+                            severity = "MEDIUM"
+                        else:
+                            severity = "LOW"
+                except Exception:
+                    pass
         
         # Look for aliases (CVEs)
         aliases = vuln_data.get("aliases", [])

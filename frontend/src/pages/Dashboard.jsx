@@ -1,54 +1,23 @@
 import { useState, useEffect } from 'react'
-import { Search, ShieldCheck, Activity, Globe, Zap, ArrowRight, ShieldAlert, FolderOpen, CheckCircle, Circle, ExternalLink } from 'lucide-react'
-import DependencyGraph from '../components/DependencyGraph'
+import { Search, ShieldCheck, Activity, Globe, Zap, ArrowRight, ShieldAlert } from 'lucide-react'
+import FindingDetailPanel from '../components/FindingDetailPanel'
+import AIScanSummary from '../components/AIScanSummary'
 
 export default function Dashboard({ githubToken }) {
   const [repoUrl, setRepoUrl] = useState('')
-  const [isScanning, setIsScanning] = useState(false)
   const [scanResult, setScanResult] = useState(null)
+  const [isScanning, setIsScanning] = useState(false)
   const [pollingId, setPollingId] = useState(null)
-  const [viewMode, setViewMode] = useState('table')
-
-  const loadingMessages = [
-    "Locating project metadata and manifest files...",
-    "Parsing dependency trees and resolving graph...",
-    "Querying OSV vulnerability database for deep insights...",
-    "Calculating contextual risk vectors and topology penalties...",
-    "Finalizing cryptographic trust ledger entries..."
-  ];
-  
-  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
-
-  useEffect(() => {
-    let interval;
-    if (isScanning && !scanResult) {
-      interval = setInterval(() => {
-        setLoadingMsgIdx(prev => (prev + 1) % loadingMessages.length);
-      }, 2500);
-    } else {
-      setLoadingMsgIdx(0);
-    }
-    return () => clearInterval(interval);
-  }, [isScanning, scanResult]);
-
-  const toggleReview = async (findingId, index) => {
-    if (!findingId) return;
-    const newDeps = [...scanResult.dependencies];
-    newDeps[index].is_reviewed = !newDeps[index].is_reviewed;
-    setScanResult({ ...scanResult, dependencies: newDeps });
-
-    try {
-      await fetch(`http://127.0.0.1:8000/api/findings/${findingId}/review`, { method: 'POST' });
-    } catch (e) {
-      console.error('Failed to review', e);
-      newDeps[index].is_reviewed = !newDeps[index].is_reviewed;
-      setScanResult({ ...scanResult, dependencies: newDeps });
-    }
-  }
+  const [selectedFinding, setSelectedFinding] = useState(null)
+  const [scanProgress, setScanProgress] = useState(0)
+  const [scanStage, setScanStage] = useState('Initializing scan...')
 
   const handleScan = async () => {
     setIsScanning(true)
     setScanResult(null)
+    setSelectedFinding(null)
+    setScanProgress(5)
+    setScanStage('Connecting to repository & verifying access...')
     try {
       // 1. Extract owner and repo from URL
       let owner, repoName;
@@ -62,29 +31,37 @@ export default function Dashboard({ githubToken }) {
         throw new Error('Invalid GitHub repository URL format. Please use https://github.com/owner/repo');
       }
 
-      // 2. Check access via GitHub API
-      const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
-        headers: {
-          'Authorization': `Bearer ${githubToken}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      });
+      // 2. Check access via GitHub API (best-effort — skip if network unavailable)
+      try {
+        const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
+          headers: {
+            'Authorization': `Bearer ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          signal: AbortSignal.timeout(8000),   // 8s cap — don't block forever
+        });
 
-      if (!ghRes.ok) {
-        if (ghRes.status === 404 || ghRes.status === 403) {
-           throw new Error('Security Error: You do not have access to this repository. If this is a private repo, ensure your Personal Access Token has the "repo" scope checked.');
+        if (ghRes.ok) {
+          const repoData = await ghRes.json();
+          // Strict access check (must have push or admin rights)
+          if (!repoData.permissions?.admin && !repoData.permissions?.push) {
+            throw new Error('Security Error: You do not have write or admin access to this repository. You can only scan repositories you own.');
+          }
+        } else if (ghRes.status === 404 || ghRes.status === 403) {
+          throw new Error('Security Error: You do not have access to this repository. If this is a private repo, ensure your Personal Access Token has the "repo" scope checked.');
         }
-        throw new Error(`GitHub API Error: ${ghRes.statusText}`);
+        // Any other non-OK status: let backend handle it
+      } catch (ghErr) {
+        // If it's our security error, re-throw it
+        if (ghErr.message.startsWith('Security Error')) throw ghErr;
+        // Otherwise it's a network/timeout error — skip the pre-check, backend will catch it
+        console.warn('GitHub API pre-check skipped (network unavailable):', ghErr.message);
       }
 
-      const repoData = await ghRes.json();
-      
-      // 3. Strict access check (must have push or admin rights)
-      if (!repoData.permissions?.admin && !repoData.permissions?.push) {
-          throw new Error('Security Error: You do not have write or admin access to this repository. You can only scan repositories you own.');
-      }
+      setScanProgress(15)
+      setScanStage('Cloning repository files & lockfiles...')
 
-      // 4. Proceed with backend scan
+      // 3. Proceed with backend scan
       const res = await fetch('http://127.0.0.1:8000/api/scan/github', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -93,40 +70,44 @@ export default function Dashboard({ githubToken }) {
       if (!res.ok) throw new Error('Failed to initiate scan')
       const data = await res.json()
       setPollingId(data.scan_id)
+      setScanProgress(25)
+      setScanStage('Parsing dependencies and lockfiles...')
     } catch (e) {
       console.error(e)
       setScanResult({ error: e.message || 'Failed to reach backend. Make sure Uvicorn is running on port 8000.' })
       setIsScanning(false)
+      setScanProgress(0)
     }
   }
 
-  const handleLocalScan = async () => {
-    if (!window.electronAPI) {
-      alert("Local scanning is only available in the AtomChain desktop app.");
-      return;
-    }
-    
-    try {
-      const directoryPath = await window.electronAPI.selectDirectory();
-      if (!directoryPath) return;
+  // Realistic incremental progress while scanning is active
+  useEffect(() => {
+    if (!isScanning) return;
 
-      setIsScanning(true);
-      setScanResult(null);
-
-      const res = await fetch('http://127.0.0.1:8000/api/scan/local', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ directory_path: directoryPath })
+    const progressTimer = setInterval(() => {
+      setScanProgress((prev) => {
+        if (prev < 30) {
+          setScanStage('Cloning Git repository...')
+          return prev + 3;
+        } else if (prev < 55) {
+          setScanStage('Extracting dependencies and package manifests...')
+          return prev + 2;
+        } else if (prev < 75) {
+          setScanStage('Querying OSV vulnerability intelligence database...')
+          return prev + 1.5;
+        } else if (prev < 92) {
+          setScanStage('Calculating blast radius, topology & risk scores...')
+          return prev + 0.8;
+        } else if (prev < 96) {
+          setScanStage('Finalizing security audit report...')
+          return prev + 0.2;
+        }
+        return prev;
       })
-      if (!res.ok) throw new Error('Failed to initiate local scan')
-      const data = await res.json()
-      setPollingId(data.scan_id)
-    } catch (e) {
-      console.error(e)
-      setScanResult({ error: e.message || 'Failed to reach backend.' })
-      setIsScanning(false)
-    }
-  }
+    }, 600);
+
+    return () => clearInterval(progressTimer);
+  }, [isScanning])
 
   useEffect(() => {
     if (!pollingId) return;
@@ -138,17 +119,23 @@ export default function Dashboard({ githubToken }) {
         const data = await res.json()
 
         if (data.status === 'COMPLETED') {
-          setScanResult(data)
-          setIsScanning(false)
-          setPollingId(null)
+          setScanProgress(100)
+          setScanStage('Analysis complete!')
+          setTimeout(() => {
+            setScanResult(data)
+            setIsScanning(false)
+            setPollingId(null)
+          }, 450)
+          // Store scan_id for AI Investigator page
+          localStorage.setItem('last_scan_id', data.scan_id)
         } else if (data.status === 'FAILED') {
-          setScanResult({ error: 'Repository scanning failed. Check backend logs.' })
+          setScanResult({ error: data.error_message || 'Repository scanning failed. Check backend logs.' })
           setIsScanning(false)
           setPollingId(null)
+          setScanProgress(0)
         }
       } catch (e) {
         console.error(e)
-        // Keep polling if it was a temporary network blip, or we can abort. We'll keep polling for robust prototype.
       }
     }, 2000)
 
@@ -198,23 +185,6 @@ export default function Dashboard({ githubToken }) {
               )}
             </button>
           </div>
-          
-          <div className="mt-8 flex items-center justify-center gap-4 text-body-sm text-muted">
-            <span className="w-16 h-px bg-hairline-on-dark"></span>
-            <span className="tracking-widest uppercase text-xs">OR</span>
-            <span className="w-16 h-px bg-hairline-on-dark"></span>
-          </div>
-          
-          <div className="mt-6 flex justify-center">
-            <button 
-              onClick={handleLocalScan}
-              disabled={isScanning}
-              className="h-10 px-6 rounded-pill border border-hairline-on-dark text-on-dark hover:bg-surface-elevated-dark disabled:opacity-50 transition-colors flex items-center gap-2"
-            >
-              <FolderOpen size={16} className="text-primary" />
-              Scan Local Directory
-            </button>
-          </div>
         </div>
       </section>
 
@@ -227,16 +197,70 @@ export default function Dashboard({ githubToken }) {
           </div>
 
           {isScanning && !scanResult ? (
-            <div className="bg-surface-card-dark border border-hairline-on-dark rounded-xl p-12 text-center max-w-2xl mx-auto flex flex-col items-center min-h-[300px] justify-center">
-               <Activity size={48} className="text-primary animate-pulse mb-6" />
-               <h3 className="text-title-lg text-on-dark mb-2">Analyzing Repository</h3>
-               <div className="h-8 flex items-center justify-center">
-                 <p className="text-body-md text-muted animate-fade-in">
-                   {loadingMessages[loadingMsgIdx]}
-                 </p>
-               </div>
+            <div className="bg-surface-card-dark border border-hairline-on-dark rounded-2xl p-8 md:p-10 max-w-2xl mx-auto shadow-2xl relative overflow-hidden backdrop-blur-sm">
+              {/* Background ambient glow */}
+              <div className="absolute top-0 right-1/4 w-48 h-48 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-0"></div>
+
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="relative mb-5">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shadow-lg shadow-primary/20">
+                    <Activity size={32} className="animate-spin text-primary" style={{ animationDuration: '3s' }} />
+                  </div>
+                  <div className="absolute -inset-1 rounded-2xl bg-primary/20 blur-md -z-10 animate-pulse"></div>
+                </div>
+
+                <h3 className="text-title-lg text-on-dark font-semibold tracking-tight mb-2">Analyzing Repository</h3>
+                <p className="text-body-md text-primary font-medium mb-6 min-h-[1.5rem] transition-all duration-300">
+                  {scanStage}
+                </p>
+
+                {/* Progress Bar Container */}
+                <div className="w-full bg-surface-elevated-dark rounded-full h-3.5 p-0.5 border border-hairline-on-dark relative overflow-hidden mb-3">
+                  <div 
+                    className="h-full bg-gradient-to-r from-emerald-500 via-primary to-teal-300 rounded-full transition-all duration-500 ease-out shadow-sm relative overflow-hidden"
+                    style={{ width: `${Math.min(100, Math.round(scanProgress))}%` }}
+                  >
+                    {/* Animated shine line */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_2s_infinite] w-full"></div>
+                  </div>
+                </div>
+
+                {/* Progress metadata */}
+                <div className="w-full flex justify-between items-center text-caption text-muted px-1 mb-6 font-plex">
+                  <span>Securing Supply Chain Pipeline</span>
+                  <span className="text-on-dark font-semibold">{Math.min(100, Math.round(scanProgress))}%</span>
+                </div>
+
+                {/* Milestone pills */}
+                <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-hairline-on-dark/60 text-left">
+                  <div className={`text-caption p-2 rounded-lg border transition-all ${scanProgress >= 25 ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-dark border-hairline-on-dark/40 text-muted opacity-60'}`}>
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${scanProgress >= 25 ? 'bg-primary' : 'bg-muted'}`}></span>
+                      Clone Repo
+                    </div>
+                  </div>
+                  <div className={`text-caption p-2 rounded-lg border transition-all ${scanProgress >= 50 ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-dark border-hairline-on-dark/40 text-muted opacity-60'}`}>
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${scanProgress >= 50 ? 'bg-primary' : 'bg-muted'}`}></span>
+                      Parse Tree
+                    </div>
+                  </div>
+                  <div className={`text-caption p-2 rounded-lg border transition-all ${scanProgress >= 75 ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-dark border-hairline-on-dark/40 text-muted opacity-60'}`}>
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${scanProgress >= 75 ? 'bg-primary' : 'bg-muted'}`}></span>
+                      Query OSV
+                    </div>
+                  </div>
+                  <div className={`text-caption p-2 rounded-lg border transition-all ${scanProgress >= 95 ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-surface-dark border-hairline-on-dark/40 text-muted opacity-60'}`}>
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${scanProgress >= 95 ? 'bg-primary' : 'bg-muted'}`}></span>
+                      Risk Scoring
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          ) : scanResult.error ? (
+          ) : scanResult?.error ? (
             <div className="bg-surface-card-dark border border-trading-down rounded-xl p-8 text-center max-w-2xl mx-auto">
               <ShieldAlert className="w-16 h-16 text-trading-down mx-auto mb-4 opacity-50" />
               <h3 className="text-title-lg text-trading-down mb-2">Analysis Failed</h3>
@@ -245,118 +269,103 @@ export default function Dashboard({ githubToken }) {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
-              {/* Left Column: Risk Score */}
-              <div className="lg:col-span-4 bg-surface-card-dark rounded-xl p-6 border border-hairline-on-dark flex flex-col items-center justify-center min-h-[300px]">
-                <h3 className="text-title-md text-on-dark w-full text-left mb-auto">Contextual Risk Score</h3>
-                <div className="relative mt-8 mb-6">
-                  {/* Decorative circular progress */}
-                  <svg className="w-48 h-48 transform -rotate-90">
-                    <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-surface-elevated-dark" />
-                    <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray="552" strokeDashoffset={552 - (552 * scanResult.score) / 100} className="text-primary drop-shadow-md" />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-hero-display font-plex text-on-dark leading-none mb-1">{scanResult.score}</span>
-                    <span className="text-title-sm text-muted uppercase tracking-wide">/ 100</span>
+              {/* Left Column: Risk Score + AI Summary */}
+              <div className="lg:col-span-4 space-y-0">
+                <div className="bg-surface-card-dark rounded-xl p-6 border border-hairline-on-dark flex flex-col items-center justify-center min-h-[300px]">
+                  <h3 className="text-title-md text-on-dark w-full text-left mb-auto">Contextual Risk Score</h3>
+                  <div className="relative mt-8 mb-6">
+                    {/* Circular progress */}
+                    <svg className="w-48 h-48 transform -rotate-90">
+                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-surface-elevated-dark" />
+                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray="552" strokeDashoffset={552 - (552 * scanResult.score) / 100} className="text-primary drop-shadow-md" />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-hero-display font-plex text-on-dark leading-none mb-1">{scanResult.score}</span>
+                      <span className="text-title-sm text-muted uppercase tracking-wide">/ 100</span>
+                    </div>
+                  </div>
+                  <div className="bg-surface-elevated-dark px-4 py-2 rounded-lg mt-auto w-full flex justify-between items-center">
+                    <span className="text-body-sm text-muted">Overall Risk Level</span>
+                    <span className={`text-title-sm uppercase tracking-widest ${scanResult.level === 'LOW' ? 'text-trading-up' : scanResult.level === 'MEDIUM' ? 'text-primary' : 'text-trading-down'}`}>
+                      {scanResult.level}
+                    </span>
                   </div>
                 </div>
-                <div className="bg-surface-elevated-dark px-4 py-2 rounded-lg mt-auto w-full flex justify-between items-center">
-                  <span className="text-body-sm text-muted">Overall Risk Level</span>
-                  <span className={`text-title-sm uppercase tracking-widest ${scanResult.level === 'LOW' ? 'text-trading-up' : scanResult.level === 'MEDIUM' ? 'text-primary' : 'text-trading-down'}`}>
-                    {scanResult.level}
-                  </span>
-                </div>
+
+                {/* AI Summary Card — sits directly below the risk score */}
+                <AIScanSummary scanId={scanResult.scan_id} />
               </div>
 
-              {/* Right Column: Markets Table (Dependency Analysis) */}
+              {/* Right Column: Dependency Vulnerabilities Table */}
               <div className="lg:col-span-8 bg-surface-card-dark rounded-xl p-6 border border-hairline-on-dark">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-title-md text-on-dark">Dependency Vulnerabilities</h3>
                   <div className="flex gap-4 border-b border-hairline-on-dark">
-                    <button 
-                      onClick={() => setViewMode('table')}
-                      className={`text-body-sm font-medium pb-2 px-1 ${viewMode === 'table' ? 'text-primary border-b-2 border-primary' : 'text-muted hover:text-on-dark transition-colors'}`}
-                    >
-                      Table View
-                    </button>
-                    <button 
-                      onClick={() => setViewMode('graph')}
-                      className={`text-body-sm font-medium pb-2 px-1 ${viewMode === 'graph' ? 'text-primary border-b-2 border-primary' : 'text-muted hover:text-on-dark transition-colors'}`}
-                    >
-                      Graph View
+                    <button className="text-body-sm font-medium text-primary border-b-2 border-primary pb-2 px-1">
+                      All Findings ({scanResult.dependencies?.length || 0})
                     </button>
                   </div>
                 </div>
 
-                {viewMode === 'table' ? (
-                  <>
-                    {/* Table Header */}
-                    <div className="grid grid-cols-12 gap-4 text-caption text-muted mb-4 px-2">
-                      <div className="col-span-3">Package / Version</div>
-                      <div className="col-span-5">OSV Insight</div>
-                      <div className="col-span-2 text-right">Severity</div>
-                      <div className="col-span-2 flex justify-end gap-4 pr-2">
-                        <span>Review</span>
-                        <span>Link</span>
-                      </div>
-                    </div>
+                {/* Table Header */}
+                <div className="grid grid-cols-12 gap-4 text-caption text-muted mb-4 px-2">
+                  <div className="col-span-5">Package / Version</div>
+                  <div className="col-span-3 text-right">Severity</div>
+                  <div className="col-span-3 text-right">Topology</div>
+                  <div className="col-span-1"></div>
+                </div>
 
-                    {/* Table Rows */}
-                    <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
-                      {scanResult.dependencies && scanResult.dependencies.length > 0 ? (
-                        scanResult.dependencies.map((dep, i) => (
-                          <div key={i} className={`grid grid-cols-12 gap-4 items-center py-3 px-2 rounded-lg transition-colors border-b border-hairline-on-dark last:border-0 ${dep.is_reviewed ? 'opacity-40 hover:opacity-100 bg-canvas-dark' : 'hover:bg-surface-elevated-dark'}`}>
-                            <div className="col-span-3 flex items-center gap-3">
-                              <span className="text-number-md text-on-dark truncate" title={dep.id}>{dep.id}</span>
-                            </div>
-                            <div className="col-span-5 text-xs text-muted truncate" title={dep.insight}>
-                              {dep.insight}
-                            </div>
-                            <div className="col-span-2 text-right font-plex text-number-md">
-                              {['CRITICAL', 'HIGH'].includes(dep.risk) ? (
-                                <span className="text-trading-down">{dep.risk}</span>
-                              ) : dep.risk === 'MEDIUM' ? (
-                                <span className="text-primary">{dep.risk}</span>
-                              ) : (
-                                <span className="text-trading-up">{dep.risk}</span>
-                              )}
-                            </div>
-                            <div className="col-span-2 flex justify-end items-center gap-6 pr-2">
-                              <button 
-                                onClick={() => toggleReview(dep.finding_id, i)}
-                                className="text-muted hover:text-primary transition-colors cursor-pointer"
-                                title="Mark as Reviewed"
-                              >
-                                {dep.is_reviewed ? <CheckCircle size={18} className="text-primary" /> : <Circle size={18} />}
-                              </button>
-                              <a 
-                                href={`https://osv.dev/vulnerability/${dep.vulnerability_id}`} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="text-muted hover:text-primary transition-colors"
-                                title="View on OSV.dev"
-                              >
-                                <ExternalLink size={18} />
-                              </a>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="py-8 text-center text-muted">
-                          No vulnerabilities found! Your dependencies are secure.
+                {/* Table Rows */}
+                <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+                  {scanResult.dependencies && scanResult.dependencies.length > 0 ? (
+                    scanResult.dependencies.map((dep, i) => (
+                      <div
+                        key={i}
+                        onClick={() => setSelectedFinding(dep)}
+                        className="grid grid-cols-12 gap-4 items-center py-3 px-2 rounded-lg hover:bg-surface-elevated-dark transition-colors cursor-pointer group border-b border-hairline-on-dark last:border-0"
+                      >
+                        <div className="col-span-5 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-surface-elevated-dark flex items-center justify-center font-plex text-xs text-primary">npm</div>
+                          <span className="text-number-md text-on-dark truncate" title={dep.id}>{dep.id}</span>
                         </div>
-                      )}
+                        <div className="col-span-3 text-right font-plex text-number-md">
+                          {['CRITICAL', 'HIGH'].includes(dep.risk) ? (
+                            <span className="text-trading-down">{dep.risk}</span>
+                          ) : dep.risk === 'MEDIUM' ? (
+                            <span className="text-primary">{dep.risk}</span>
+                          ) : (
+                            <span className="text-trading-up">{dep.risk}</span>
+                          )}
+                        </div>
+                        <div className="col-span-3 text-right text-body-sm text-body">
+                          {dep.direct ? 'Direct' : 'Transitive'}
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <button className="text-muted group-hover:text-primary transition-colors">
+                            <ArrowRight size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center text-muted">
+                      No vulnerabilities found! Your dependencies are secure.
                     </div>
-                  </>
-                ) : (
-                  <div className="pt-2">
-                    <DependencyGraph dependencies={scanResult.dependencies || []} />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               
             </div>
           )}
         </section>
+      )}
+
+      {/* Finding Detail Panel (slide-in on row click) */}
+      {selectedFinding && (
+        <FindingDetailPanel
+          finding={selectedFinding}
+          onClose={() => setSelectedFinding(null)}
+        />
       )}
     </>
   )
