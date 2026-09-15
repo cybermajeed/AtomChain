@@ -8,29 +8,35 @@ class GitManager:
     def __init__(self):
         pass
 
-    def clone_repo(self, repo_url: str, branch: str = None) -> str:
+    def clone_repo(self, repo_url: str, branch: str = None, github_token: str = None) -> str:
         """
         Clones a GitHub repository shallowly (--depth 1) into a temporary directory.
         Returns the path to the temporary directory.
         """
         temp_dir = tempfile.mkdtemp(prefix="sustainverse_")
-        
-        # Prevent git from prompting for credentials on private repos by tweaking URL
-        # and disabling terminal prompt
+
+        # Inject token into URL for private repos
         parsed = urllib.parse.urlparse(repo_url)
         if not parsed.scheme:
             repo_url = f"https://{repo_url}"
-            
+            parsed = urllib.parse.urlparse(repo_url)
+
+        if github_token and parsed.hostname in ("github.com",):
+            tokened = parsed._replace(
+                netloc=f"x-access-token:{github_token}@{parsed.hostname}"
+            )
+            repo_url = urllib.parse.urlunparse(tokened)
+
         cmd = ["git", "clone", "--depth", "1"]
         if branch:
             cmd.extend(["--branch", branch])
-            
+
         cmd.append(repo_url)
         cmd.append(temp_dir)
-        
+
         env = os.environ.copy()
         env["GIT_TERMINAL_PROMPT"] = "0"
-        
+
         try:
             result = subprocess.run(
                 cmd,

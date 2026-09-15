@@ -1,13 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ShieldAlert, KeyRound } from "lucide-react";
 
 export default function Login({ setToken }) {
+  const [authError, setAuthError] = useState("");
+
   useEffect(() => {
     const handleMessage = (event) => {
       // Allow messages from same origin, or strictly verify if needed
       // Since it's a local app, we accept the oauth-token type
       if (event.data?.type === "oauth-token" && event.data?.token) {
+        setAuthError("");
         setToken(event.data.token);
+      } else if (event.data?.type === "oauth-error") {
+        setAuthError(event.data.error || "GitHub login failed.");
       }
     };
 
@@ -47,6 +52,12 @@ export default function Login({ setToken }) {
           Authenticate with GitHub to securely analyze your private
           repositories. We only request read access.
         </p>
+
+        {authError && (
+          <div className="mb-4 p-3 rounded-md bg-trading-down/10 border border-trading-down text-body-sm text-trading-down">
+            {authError}
+          </div>
+        )}
 
         <button
           onClick={handleGitHubLogin}
