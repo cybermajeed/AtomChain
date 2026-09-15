@@ -13,9 +13,9 @@ Traceback (most recent call last):
     raise exc
   File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpcore\_sync\connection.py", line 78, in handle_request
     stream = self._connect(request)
-  File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpcore\_sync\connection.py", line 156, in _connect
-    stream = stream.start_tls(**kwargs)
-  File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpcore\_backends\sync.py", line 154, in start_tls
+  File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpcore\_sync\connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpcore\_backends\sync.py", line 207, in connect_tcp
     with map_exceptions(exc_map):
          ~~~~~~~~~~~~~~^^^^^^^^^
   File "C:\Program Files\Python314\Lib\contextlib.py", line 162, in __exit__
@@ -23,13 +23,13 @@ Traceback (most recent call last):
     ~~~~~~~~~~~~~~^^^^^^^
   File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
     raise to_exc(exc) from exc
-httpcore.ConnectTimeout: _ssl.c:1063: The handshake operation timed out
+httpcore.ConnectError: [WinError 10053] An established connection was aborted by the software in your host machine
 
 The above exception was the direct cause of the following exception:
 
 Traceback (most recent call last):
-  File "X:\hackathon\sustainverse\backend\main.py", line 180, in process_github_scan
-    package_json = gh_client.get_file_content(owner, repo_name, "package.json", branch)
+  File "X:\hackathon\sustainverse\backend\main.py", line 179, in process_github_scan
+    package_lock = gh_client.get_file_content(owner, repo_name, "package-lock.json", branch)
   File "X:\hackathon\sustainverse\backend\scanner\github_client.py", line 26, in get_file_content
     response = client.get(url, headers=self.headers)
   File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpx\_client.py", line 1053, in get
@@ -69,4 +69,4 @@ Traceback (most recent call last):
     ~~~~~~~~~~~~~~^^^^^^^
   File "X:\hackathon\sustainverse\backend\venv\Lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
     raise mapped_exc(message) from exc
-httpx.ConnectTimeout: _ssl.c:1063: The handshake operation timed out
+httpx.ConnectError: [WinError 10053] An established connection was aborted by the software in your host machine

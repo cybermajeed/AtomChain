@@ -18,8 +18,9 @@ _INTELLIGENCE_ROOT = os.path.normpath(
 if _INTELLIGENCE_ROOT not in sys.path:
     sys.path.insert(0, _INTELLIGENCE_ROOT)
 
-from database import get_db, Scan, Finding
+from database import get_db, Scan, Finding, TrustRecord
 from scanner.git_manager import GitManager
+from scanner.github_client import GitHubAPIClient
 from parsers.npm_parser import NpmParser
 from intelligence.osv_client import OSVClient
 from dependency.graph_builder import DependencyGraph
@@ -140,6 +141,41 @@ def get_scan_status(scan_id: int, db: Session = Depends(get_db)):
     # Surface the stored error message for FAILED scans
     err_msg = getattr(scan, 'error_message', None) if scan.status == "FAILED" else None
     return ScanDetail(scan_id=scan_id, status=scan.status, message=msg, error_message=err_msg)
+
+
+@app.get("/api/ledger")
+def get_ledger(db: Session = Depends(get_db)):
+    records = db.query(TrustRecord).order_by(TrustRecord.id.desc()).all()
+    result = []
+    for r in records:
+        scan = db.query(Scan).filter(Scan.id == r.scan_id).first()
+        repo = scan.repository_url if scan else "Unknown"
+        result.append({
+            "id": r.id,
+            "scan_id": r.scan_id,
+            "repository": repo,
+            "previous_hash": r.previous_hash,
+            "record_hash": r.record_hash,
+            "timestamp": r.timestamp.isoformat()
+        })
+    return result
+
+
+@app.post("/api/ledger/verify")
+def verify_ledger(db: Session = Depends(get_db)):
+    ledger = TrustLedger(db)
+    is_valid = ledger.verify_chain()
+    return {"valid": is_valid}
+
+
+@app.post("/api/findings/{finding_id}/review")
+def review_finding(finding_id: int, db: Session = Depends(get_db)):
+    finding = db.query(Finding).filter(Finding.id == finding_id).first()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    finding.is_reviewed = 1 if finding.is_reviewed == 0 else 0
+    db.commit()
+    return {"status": "success", "is_reviewed": bool(finding.is_reviewed)}
 
 # ─── Background scan pipeline ──────────────────────────────────────────────────
 

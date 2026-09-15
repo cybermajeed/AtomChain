@@ -1,9 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom'
-import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Investigator from './pages/Investigator'
+import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import Investigator from "./pages/Investigator";
+import TrustLedger from "./pages/TrustLedger";
 
 function App() {
   const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '')
@@ -27,10 +28,18 @@ function App() {
             </Link>
             {githubToken && (
               <div className="hidden md:flex items-center gap-6 text-nav-link text-on-dark">
-                <Link to="/dashboard" className="hover:text-primary transition-colors flex items-center gap-1">Dashboard</Link>
-                <a href="#" className="hover:text-primary transition-colors flex items-center gap-1">Local Scan <ChevronDown size={16}/></a>
-                <a href="#" className="hover:text-primary transition-colors">Trust Ledger</a>
-                <Link to="/investigator" className="hover:text-primary transition-colors flex items-center gap-1">AI Investigator</Link>
+                <Link
+                  to="/dashboard"
+                  className="hover:text-primary transition-colors flex items-center gap-1"
+                >
+                  Dashboard
+                </Link>
+                <Link to="/ledger" className="hover:text-primary transition-colors">
+                  Trust Ledger
+                </Link>
+                <Link to="/investigator" className="hover:text-primary transition-colors flex items-center gap-1">
+                  AI Investigator
+                </Link>
               </div>
             )}
           </div>
@@ -69,6 +78,16 @@ function App() {
             <Route 
               path="/investigator" 
               element={githubToken ? <Investigator /> : <Navigate to="/" />} 
+            />
+            <Route
+              path="/ledger"
+              element={
+                githubToken ? (
+                  <TrustLedger />
+                ) : (
+                  <Navigate to="/" />
+                )
+              }
             />
           </Routes>
         </div>
