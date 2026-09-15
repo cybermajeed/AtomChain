@@ -32,6 +32,8 @@ class Finding(Base):
     risk_score = Column(Float)
     confidence = Column(Float)
     finding_type = Column(String) # CONFIRMED_VULNERABILITY, SUSPICIOUS_SIGNAL, ANOMALY
+    insight = Column(String)
+    is_reviewed = Column(Integer, default=0)
     
     scan = relationship("Scan", back_populates="findings")
 

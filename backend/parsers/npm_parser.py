@@ -1,50 +1,55 @@
-import os
-import json
-import subprocess
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class NpmParser:
-    def __init__(self, target_dir: str):
-        self.target_dir = target_dir
-
-    def ensure_lockfile(self):
+    def __init__(self, package_json: Optional[dict] = None, package_lock_json: Optional[dict] = None):
         """
-        If package-lock.json doesn't exist, generates it dynamically
-        using npm install --package-lock-only.
+        Accepts the raw JSON dictionaries of package.json and package-lock.json directly from the GitHub API.
+        This completely bypasses disk I/O and `npm install` overhead.
         """
-        lockfile_path = os.path.join(self.target_dir, 'package-lock.json')
-        if not os.path.exists(lockfile_path):
-            print("package-lock.json missing. Generating via npm...")
-            try:
-                # Use shell=True for Windows compatibility with npm.cmd
-                subprocess.run(
-                    "npm install --package-lock-only --ignore-scripts --no-audit --no-fund",
-                    cwd=self.target_dir,
-                    shell=True,
-                    check=True,
-                    capture_output=True
-                )
-            except subprocess.CalledProcessError as e:
-                raise Exception(f"Failed to generate package-lock.json: {e.stderr}")
+        self.package_json = package_json
+        self.package_lock_json = package_lock_json
 
     def parse(self) -> List[Dict[str, Any]]:
         """
-        Parses the lockfile and returns a list of dependencies.
+        Parses the lockfile (or package.json as fallback) and returns a list of dependencies.
         Returns: [{"name": "axios", "version": "1.5.0", "is_direct": True}, ...]
         """
-        self.ensure_lockfile()
+        if self.package_lock_json:
+            packages = self.package_lock_json.get('packages', {})
+            if not packages:
+                # Fallback for older lockfiles (v1)
+                packages = self.package_lock_json.get('dependencies', {})
+                return self._parse_v1(packages)
+            return self._parse_v3(packages)
+            
+        # SPEED OPTIMIZATION: If no lockfile exists, fall back to package.json immediately.
+        if self.package_json:
+            return self._parse_package_json()
+            
+        return []
+
+    def _parse_package_json(self) -> List[Dict[str, Any]]:
+        """
+        Fallback parser that only grabs direct dependencies from package.json.
+        """
+        deps = []
+        direct_deps = self.package_json.get('dependencies', {})
+        dev_deps = self.package_json.get('devDependencies', {})
         
-        lockfile_path = os.path.join(self.target_dir, 'package-lock.json')
-        with open(lockfile_path, 'r', encoding='utf-8') as f:
-            lock_data = json.load(f)
+        # Combine them
+        all_deps = {**direct_deps, **dev_deps}
+        
+        for name, version in all_deps.items():
+            # Strip semver prefixes (^, ~, >, >=, <=)
+            clean_version = version.replace('^', '').replace('~', '').replace('>', '').replace('<', '').replace('=', '').strip()
+            deps.append({
+                "name": name,
+                "version": clean_version,
+                "is_direct": True,
+                "ecosystem": "npm"
+            })
             
-        packages = lock_data.get('packages', {})
-        if not packages:
-            # Fallback for older lockfiles (v1)
-            packages = lock_data.get('dependencies', {})
-            return self._parse_v1(packages)
-            
-        return self._parse_v3(packages)
+        return deps
 
     def _parse_v3(self, packages: dict) -> List[Dict[str, Any]]:
         deps = []
@@ -56,7 +61,6 @@ class NpmParser:
             if path == "":
                 continue
                 
-            # Path usually looks like "node_modules/axios"
             name = path.split("node_modules/")[-1]
             version = info.get("version")
             
@@ -75,13 +79,12 @@ class NpmParser:
         return deps
 
     def _parse_v1(self, dependencies: dict) -> List[Dict[str, Any]]:
-        # Simplified parsing for v1
         deps = []
         for name, info in dependencies.items():
             deps.append({
                 "name": name,
                 "version": info.get("version"),
-                "is_direct": False, # Hard to determine easily in v1 without package.json crossref
+                "is_direct": False,
                 "ecosystem": "npm"
             })
         return deps

@@ -29,6 +29,38 @@ class OSVClient:
             print(f"Error querying OSV for {name}@{version}: {e}")
             return []
 
+    def query_batch(self, packages: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+        """
+        Queries the OSV API for multiple packages in a single HTTP request.
+        Returns a list of vulnerability lists, corresponding to each package queried.
+        """
+        if not packages:
+            return []
+            
+        payload = {
+            "queries": [
+                {
+                    "version": pkg["version"],
+                    "package": {
+                        "name": pkg["name"],
+                        "ecosystem": pkg.get("ecosystem", "npm")
+                    }
+                } for pkg in packages
+            ]
+        }
+        
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post("https://api.osv.dev/v1/querybatch", json=payload)
+                response.raise_for_status()
+                data = response.json()
+                
+                return [result.get("vulns", []) for result in data.get("results", [])]
+        except Exception as e:
+            print(f"Error executing OSV batch query: {e}")
+            # Fallback to empty results
+            return [[] for _ in packages]
+
     def format_vulnerability(self, vuln_data: dict) -> dict:
         """
         Formats raw OSV vulnerability data into our internal standard.
