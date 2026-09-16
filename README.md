@@ -7,9 +7,8 @@
 <img src="assets/hero-scan.svg" alt="AtomChain radar scan" width="340" />
 
 [![Status](https://img.shields.io/badge/status-alpha-fcd535?style=for-the-badge&labelColor=181a20)](https://github.com/anomalyco/opencode)
-[![Version](https://img.shields.io/badge/version-0.0.1-0ecb81?style=for-the-badge&labelColor=181a20)](https://github.com/anomalyco/opencode)
-[![Edition](https://img.shields.io/badge/edition-local-open--source-2dbdb6?style=for-the-badge&labelColor=181a20)](TERMS_OF_SERVICE.md)
-[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-929aa5?style=for-the-badge&labelColor=181a20)](#-desktop-app)
+[![Version](https://img.shields.io/badge/version-1.0-0ecb81?style=for-the-badge&labelColor=181a20)](https://github.com/anomalyco/opencode)
+[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20web-929aa5?style=for-the-badge&labelColor=181a20)](#-desktop-app)
 
 </div>
 
