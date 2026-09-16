@@ -936,55 +936,54 @@ export default function FindingDetailPage() {
 
           <div className="flex items-center gap-3">
             {(finding.risk || finding.severity || "HIGH").toUpperCase() ===
-              "UNKNOWN" &&
-              (!isReviewed ? (
-                <div className="relative" ref={reviewMenuRef}>
-                  <button
-                    onClick={() => setShowReviewMenu(!showReviewMenu)}
-                    disabled={reviewing}
-                    className="h-10 px-4 rounded-md text-caption font-button transition-colors bg-surface-elevated-dark border border-white/[.1] text-on-dark hover:border-primary/40 flex items-center gap-2 font-semibold"
-                  >
-                    Mark as...
-                    <CaretDown
-                      size={12}
-                      className={showReviewMenu ? "rotate-180" : ""}
-                    />
-                  </button>
-                  {showReviewMenu && (
-                    <div className="absolute right-0 top-[calc(100%+8px)] w-48 overflow-hidden rounded-xl border border-white/10 bg-[#1c1815] shadow-2xl py-1 z-[9999]">
-                      <button
-                        onClick={() => handleReview("ACCEPT")}
-                        className="flex w-full items-center px-4 py-2.5 text-left text-sm text-trading-up font-medium hover:bg-white/[.04]"
-                      >
-                        Accept Risk
-                      </button>
-                      <button
-                        onClick={() => handleReview("REJECT")}
-                        className="flex w-full items-center px-4 py-2.5 text-left text-sm text-primary font-medium hover:bg-white/[.04]"
-                      >
-                        False Positive
-                      </button>
-                      <button
-                        onClick={() => handleReview("INVESTIGATE")}
-                        className="flex w-full items-center px-4 py-2.5 text-left text-sm text-severity-moderate font-medium hover:bg-white/[.04]"
-                      >
-                        Investigating
-                      </button>
-                      <button
-                        onClick={() => handleReview("OVERRIDE")}
-                        className="flex w-full items-center px-4 py-2.5 text-left text-sm text-severity-critical font-medium hover:bg-white/[.04]"
-                      >
-                        Override
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="h-10 px-4 rounded-md text-caption font-button bg-trading-up/10 text-trading-up flex items-center gap-2 border border-trading-up/20 font-semibold">
-                  <CheckCircle size={16} />{" "}
-                  {reviewedTag ? `Reviewed as ${reviewedTag}` : "Reviewed"}
-                </div>
-              ))}
+              "UNKNOWN" && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleReview("ACCEPT")}
+                  disabled={reviewing}
+                  className={`h-10 px-3 rounded-md text-xs font-medium transition-colors border ${
+                    isReviewed && reviewedTag === "ACCEPT"
+                      ? "bg-white border-white text-black"
+                      : "bg-surface-elevated-dark border-white/[.1] text-trading-up hover:bg-trading-up/10 hover:border-trading-up/30"
+                  }`}
+                >
+                  Accept Risk
+                </button>
+                <button
+                  onClick={() => handleReview("REJECT")}
+                  disabled={reviewing}
+                  className={`h-10 px-3 rounded-md text-xs font-medium transition-colors border ${
+                    isReviewed && reviewedTag === "REJECT"
+                      ? "bg-white border-white text-black"
+                      : "bg-surface-elevated-dark border-white/[.1] text-primary hover:bg-primary/10 hover:border-primary/30"
+                  }`}
+                >
+                  False Positive
+                </button>
+                <button
+                  onClick={() => handleReview("INVESTIGATE")}
+                  disabled={reviewing}
+                  className={`h-10 px-3 rounded-md text-xs font-medium transition-colors border ${
+                    isReviewed && reviewedTag === "INVESTIGATE"
+                      ? "bg-white border-white text-black"
+                      : "bg-surface-elevated-dark border-white/[.1] text-severity-moderate hover:bg-severity-moderate/10 hover:border-severity-moderate/30"
+                  }`}
+                >
+                  Investigating
+                </button>
+                <button
+                  onClick={() => handleReview("OVERRIDE")}
+                  disabled={reviewing}
+                  className={`h-10 px-3 rounded-md text-xs font-medium transition-colors border ${
+                    isReviewed && reviewedTag === "OVERRIDE"
+                      ? "bg-white border-white text-black"
+                      : "bg-surface-elevated-dark border-white/[.1] text-severity-critical hover:bg-severity-critical/10 hover:border-severity-critical/30"
+                  }`}
+                >
+                  Override
+                </button>
+              </div>
+            )}
             <button
               onClick={() => runAnalysis("vulnerability")}
               disabled={loading}
