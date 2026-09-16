@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useId, useMemo } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Pulse, Globe, ArrowRight, Warning, Folder, CaretDown, GitBranch, FileArchive } from '@phosphor-icons/react'
+import { Pulse, Globe, ArrowRight, Warning, Folder, CaretDown, GitBranch, FileArchive, MagnifyingGlass, Funnel, X } from '@phosphor-icons/react'
 import FindingDetailPanel from '../components/FindingDetailPanel'
 import BorderBeam from '../components/ui/border-beam-search'
 import ActionSearchBar from '../components/ui/action-search-bar'
@@ -30,20 +30,103 @@ const MANIFEST_EXACT = [
   'environment.yml', 'environment.yaml',
 ]
 
-const severityText = (sev) => {
-  const s = (sev || '').toUpperCase()
-  if (s === 'CRITICAL') return 'text-severity-critical'
-  if (s === 'HIGH') return 'text-severity-high'
-  if (s === 'MEDIUM' || s === 'MODERATE') return 'text-severity-moderate'
-  return 'text-severity-low'
-}
-
 const isManifestFile = (name) => {
   const base = (name || '').toLowerCase()
   if (MANIFEST_EXACT.includes(base)) return true
   if (base.startsWith('requirements-') && base.endsWith('.txt')) return true
   if (base.endsWith('.csproj') || base.endsWith('.fsproj') || base.endsWith('.props')) return true
   return false
+}
+
+// Clean display name for the project structure header — from a GitHub URL,
+// local/folder/zip path, or plain name.
+const shouldShowInVulnerable = (dep) => ((dep.risk || '').toUpperCase() !== 'LOW')
+
+const SEV_RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, MODERATE: 2, LOW: 1, UNKNOWN: 0 }
+const sevRank = (dep) => SEV_RANK[(dep.risk || '').toUpperCase()] ?? 0
+
+const getProjectLabel = (repoUrl, localPath) => {
+  if (repoUrl) {
+    try {
+      const u = new URL(repoUrl)
+      const parts = u.pathname.split('/').filter(Boolean)
+      if (parts.length >= 2) return `${parts[0]}/${parts[1].replace(/\.git$/i, '')}`
+    } catch (e) {}
+    return repoUrl.replace(/[\\/]+$/, '')
+  }
+  if (localPath) {
+    const clean = localPath.replace(/^(zip|local|folder):\/\//, '')
+    const parts = clean.split(/[\\/]+/).filter(Boolean)
+    return parts[parts.length - 1] || clean
+  }
+  return 'Analyzed project'
+}
+
+const computeRiskTone = (level, score) => {
+  const lv = (level || (score > 70 ? 'HIGH' : 'LOW')).toUpperCase()
+  if (lv === 'CRITICAL') return { from: '#9f1239', to: '#ef4444', glow: 'bg-severity-critical', text: 'text-severity-critical' }
+  if (lv === 'HIGH') return { from: '#ef4444', to: '#ff761f', glow: 'bg-severity-high', text: 'text-severity-high' }
+  if (lv === 'MEDIUM' || lv === 'MODERATE') return { from: '#eab308', to: '#f59e0b', glow: 'bg-severity-moderate', text: 'text-severity-moderate' }
+  return { from: '#22c55e', to: '#86efac', glow: 'bg-severity-low', text: 'text-severity-low' }
+}
+
+function ScoreRing({ label, value, tone, badge, description }) {
+  const gid = useId()
+  const [display, setDisplay] = useState(0)
+  const size = 172
+  const stroke = 13
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+
+  useEffect(() => {
+    let raf
+    const target = Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
+    const start = performance.now()
+    const dur = 1000
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / dur)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setDisplay(Math.round(target * eased))
+      if (t < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value])
+
+  const dash = c * (1 - display / 100)
+
+  return (
+    <div className="bento relative flex flex-col items-center overflow-hidden px-6 pb-6 pt-8">
+      <div className={`pointer-events-none absolute -top-10 h-36 w-36 rounded-full blur-3xl opacity-25 ${tone.glow}`} />
+      <div className="relative">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <defs>
+            <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={tone.from} />
+              <stop offset="100%" stopColor={tone.to} />
+            </linearGradient>
+          </defs>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`url(#${gid})`} strokeWidth={stroke}
+            strokeLinecap="round" strokeDasharray={c} strokeDashoffset={dash}
+            style={{ filter: `drop-shadow(0 0 12px ${tone.from}55)` }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="flex items-baseline gap-1">
+            <span className={`text-[46px] font-bold leading-none tracking-tight ${tone.text}`}>{display}</span>
+            <span className="text-sm font-semibold text-muted">%</span>
+          </div>
+          {badge && <span className="mt-2.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[.12em]" style={{ borderColor: `${tone.from}66`, backgroundColor: `${tone.from}1a`, color: tone.from }}>{badge}</span>}
+        </div>
+      </div>
+      <div className="mt-4 text-center">
+        <p className="text-sm font-semibold text-on-dark">{label}</p>
+        <p className="mt-1 text-xs text-muted">{description}</p>
+      </div>
+    </div>
+  )
 }
 
 export default function Dashboard({ githubToken }) {
@@ -76,6 +159,10 @@ export default function Dashboard({ githubToken }) {
   const [reposError, setReposError] = useState('')
   const [history, setHistory] = useState([])
   const [showOnlyVulnerable, setShowOnlyVulnerable] = useState(false)
+  const [vulnSearch, setVulnSearch] = useState('')
+  const [vulnSeverity, setVulnSeverity] = useState('ALL')
+  const [vulnTopology, setVulnTopology] = useState('ALL')
+  const [vulnSort, setVulnSort] = useState('severity-desc')
 
   useEffect(() => {
     if (scanResult) {
@@ -266,7 +353,7 @@ export default function Dashboard({ githubToken }) {
     }
   }
 
-  const handleScan = async () => {
+  const handleScan = async (url = repoUrl) => {
     setIsScanning(true)
     setScanResult(null)
     setSelectedFinding(null)
@@ -276,7 +363,7 @@ export default function Dashboard({ githubToken }) {
       // 1. Extract owner and repo from URL
       let owner, repoName;
       try {
-        const urlObj = new URL(repoUrl);
+        const urlObj = new URL(url);
         const parts = urlObj.pathname.split('/').filter(Boolean);
         if (parts.length < 2) throw new Error();
         owner = parts[0];
@@ -319,7 +406,7 @@ export default function Dashboard({ githubToken }) {
       const res = await fetch('http://127.0.0.1:8000/api/scan/github', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo_url: repoUrl, github_token: githubToken })
+        body: JSON.stringify({ repo_url: url, github_token: githubToken })
       })
       if (!res.ok) throw new Error('Failed to initiate scan')
       const data = await res.json()
@@ -396,8 +483,10 @@ export default function Dashboard({ githubToken }) {
   }
 
   const selectRepo = (repo) => {
-    setRepoUrl(`https://github.com/${repo.full_name}`)
+    const url = `https://github.com/${repo.full_name}`
+    setRepoUrl(url)
     setIsRepoDropdownOpen(false)
+    handleScan(url)
   }
 
   const debouncedRepoUrl = useDebounce(repoUrl, 200)
@@ -524,6 +613,34 @@ export default function Dashboard({ githubToken }) {
     return () => clearInterval(interval)
   }, [pollingId])
 
+  const processedDeps = useMemo(() => {
+    if (!scanResult?.dependencies) return []
+    let list = showOnlyVulnerable ? scanResult.dependencies.filter(shouldShowInVulnerable) : [...scanResult.dependencies]
+
+    const q = vulnSearch.trim().toLowerCase()
+    if (q) {
+      list = list.filter((d) =>
+        (d.id || '').toLowerCase().includes(q) ||
+        (d.ecosystem || '').toLowerCase().includes(q) ||
+        (d.version || '').toLowerCase().includes(q)
+      )
+    }
+
+    if (vulnSeverity !== 'ALL') list = list.filter((d) => (d.risk || '').toUpperCase() === vulnSeverity)
+    if (vulnTopology !== 'ALL') list = list.filter((d) => (vulnTopology === 'DIRECT' ? !!d.direct : !d.direct))
+
+    switch (vulnSort) {
+      case 'name-asc': list.sort((a, b) => (a.id || '').localeCompare(b.id || '')); break
+      case 'name-desc': list.sort((a, b) => (b.id || '').localeCompare(a.id || '')); break
+      case 'severity-asc': list.sort((a, b) => sevRank(a) - sevRank(b)); break
+      case 'topology-direct': list.sort((a, b) => (b.direct ? 1 : 0) - (a.direct ? 1 : 0)); break
+      case 'topology-transitive': list.sort((a, b) => (a.direct ? 1 : 0) - (b.direct ? 1 : 0)); break
+      case 'severity-desc':
+      default: list.sort((a, b) => sevRank(b) - sevRank(a)); break
+    }
+    return list
+  }, [scanResult, showOnlyVulnerable, vulnSearch, vulnSeverity, vulnTopology, vulnSort])
+
   return (
     <>
       <section className="mx-auto w-full max-w-[1500px] pt-8 md:pt-12">
@@ -630,17 +747,15 @@ export default function Dashboard({ githubToken }) {
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {[
-                  { label: 'Context risk', value: scanResult.score ?? 0, color: severityText(scanResult.level) },
-                  { label: 'Project health', value: Math.max(0, 100 - (scanResult.score ?? 0)), color: 'text-trading-up' },
-                  { label: 'Signal confidence', value: scanResult.confidence ?? 86, color: 'text-body' },
-                ].map((metric) => <div key={metric.label} className="bento flex items-center gap-5 p-5"><div className={`grid h-20 w-20 place-items-center rounded-full border-4 border-current bg-black/10 text-xl font-bold ${metric.color}`}>{metric.value}</div><div><p className="eyebrow">{metric.label}</p><p className="mt-1 text-xs text-muted">{metric.label === 'Context risk' ? (scanResult.level || 'Assessing') : metric.label === 'Project health' ? 'Dependency posture' : 'Evidence quality'}</p></div></div>)}
+<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <ScoreRing label="Context risk" value={scanResult.score ?? 0} tone={computeRiskTone(scanResult.level, scanResult.score)} badge={scanResult.level || 'Assessing'} description="Threat level across the dependency graph" />
+                <ScoreRing label="Project health" value={Math.max(0, 100 - (scanResult.score ?? 0))} tone={{ from: '#0ecb81', to: '#2dbdb6', glow: 'bg-trading-up', text: 'text-trading-up' }} description="Dependency posture & maintenance score" />
+                <ScoreRing label="Signal confidence" value={scanResult.confidence ?? 86} tone={{ from: '#3b82f6', to: '#38bdf8', glow: 'bg-info', text: 'text-info' }} description="Evidence quality behind every finding" />
               </div>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
               <div className="bento lg:col-span-4 p-5">
-                <div className="mb-5 flex items-center justify-between"><div><p className="eyebrow mb-1">Project structure</p><h3 className="text-sm font-semibold text-on-dark">{repoUrl || localPath || 'Analyzed project'}</h3></div><Folder size={18} className="text-primary" /></div>
+                <div className="mb-5 flex items-center justify-between"><div><p className="eyebrow mb-1">Project structure</p><h3 className="text-sm font-semibold text-on-dark">{getProjectLabel(repoUrl, localPath)}</h3></div><Folder size={18} className="text-primary" /></div>
                 <div className="space-y-1 text-sm"><div className="rounded-lg px-3 py-2 text-body">⌄ &nbsp; root</div><div className="rounded-lg px-3 py-2 pl-8 text-muted">├─ package manifests</div><div className="rounded-lg px-3 py-2 pl-8 text-muted">├─ dependencies</div><div className="rounded-lg px-3 py-2 pl-8 text-muted">└─ lockfiles</div></div>
                 <button onClick={() => setShowOnlyVulnerable(v => !v)} className={`mt-5 w-full rounded-lg border py-2.5 text-xs transition-colors ${showOnlyVulnerable ? 'border-primary bg-primary/15 text-primary' : 'border-white/[.08] text-body hover:border-primary/40 hover:text-primary'}`}>{showOnlyVulnerable ? 'Showing vulnerable files' : 'Show vulnerable files only'}</button>
               </div>
@@ -651,9 +766,59 @@ export default function Dashboard({ githubToken }) {
                   <h3 className="text-title-md text-on-dark">Dependency Vulnerabilities</h3>
                   <div className="flex gap-4 border-b border-hairline-on-dark">
                     <button className="text-body-sm font-medium text-primary border-b-2 border-primary pb-2 px-1">
-                      {showOnlyVulnerable ? 'Vulnerable Findings' : 'All Findings'} ({showOnlyVulnerable ? (scanResult.dependencies || []).filter((d) => !['LOW', 'UNKNOWN'].includes((d.risk || '').toUpperCase())).length : scanResult.dependencies?.length || 0})
+                      {showOnlyVulnerable ? 'Vulnerable Findings' : 'All Findings'} ({showOnlyVulnerable ? (scanResult.dependencies || []).filter(shouldShowInVulnerable).length : scanResult.dependencies?.length || 0})
                     </button>
                   </div>
+                </div>
+
+                {/* Filter / Search / Sort Toolbar */}
+                <div className="mb-4 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative min-w-[220px] flex-1">
+                      <MagnifyingGlass size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                      <input
+                        type="text"
+                        value={vulnSearch}
+                        onChange={(e) => setVulnSearch(e.target.value)}
+                        placeholder="Search packages, ecosystems, versions…"
+                        className="w-full rounded-lg border border-white/[.08] bg-surface-elevated-dark py-2 pl-9 pr-8 text-sm text-on-dark placeholder:text-muted outline-none transition-colors focus:border-primary/60 focus:ring-1 focus:ring-primary/30"
+                      />
+                      {vulnSearch && (
+                        <button onClick={() => setVulnSearch('')} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted transition-colors hover:text-on-dark">
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted"><Funnel size={14} className="text-primary" />Filter</span>
+                      <label className="sr-only" htmlFor="sev-filter">Severity</label>
+                      <select id="sev-filter" value={vulnSeverity} onChange={(e) => setVulnSeverity(e.target.value)} className="cursor-pointer rounded-lg border border-white/[.08] bg-surface-elevated-dark px-3 py-2 text-xs text-on-dark outline-none transition-colors focus:border-primary/60">
+                        <option value="ALL">All severities</option>
+                        <option value="CRITICAL">Critical</option>
+                        <option value="HIGH">High</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="LOW">Low</option>
+                        <option value="UNKNOWN">Unknown</option>
+                      </select>
+                      <label className="sr-only" htmlFor="topo-filter">Topology</label>
+                      <select id="topo-filter" value={vulnTopology} onChange={(e) => setVulnTopology(e.target.value)} className="cursor-pointer rounded-lg border border-white/[.08] bg-surface-elevated-dark px-3 py-2 text-xs text-on-dark outline-none transition-colors focus:border-primary/60">
+                        <option value="ALL">All topology</option>
+                        <option value="DIRECT">Direct</option>
+                        <option value="TRANSITIVE">Transitive</option>
+                      </select>
+                      <label className="sr-only" htmlFor="sort-filter">Sort</label>
+                      <select id="sort-filter" value={vulnSort} onChange={(e) => setVulnSort(e.target.value)} className="cursor-pointer rounded-lg border border-white/[.08] bg-surface-elevated-dark px-3 py-2 text-xs text-on-dark outline-none transition-colors focus:border-primary/60">
+                        <option value="severity-desc">Severity ↓</option>
+                        <option value="severity-asc">Severity ↑</option>
+                        <option value="name-asc">Name A–Z</option>
+                        <option value="name-desc">Name Z–A</option>
+                        <option value="topology-direct">Direct first</option>
+                        <option value="topology-transitive">Transitive first</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted">{processedDeps.length} of {scanResult.dependencies?.length || 0} dependencies shown</div>
                 </div>
 
                 {/* Table Header */}
@@ -666,8 +831,8 @@ export default function Dashboard({ githubToken }) {
 
                 {/* Table Rows */}
                 <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
-                  {scanResult.dependencies && (showOnlyVulnerable ? scanResult.dependencies.filter((d) => !['LOW', 'UNKNOWN'].includes((d.risk || '').toUpperCase())) : scanResult.dependencies).length > 0 ? (
-                    (showOnlyVulnerable ? scanResult.dependencies.filter((d) => !['LOW', 'UNKNOWN'].includes((d.risk || '').toUpperCase())) : scanResult.dependencies).map((dep, i) => (
+                  {processedDeps.length > 0 ? (
+                    processedDeps.map((dep, i) => (
                       <div
                         key={i}
                         onClick={() => navigate(`/finding/${dep.finding_id || dep.id}`, { state: { finding: dep, dependencies: scanResult?.dependencies } })}
@@ -684,6 +849,8 @@ export default function Dashboard({ githubToken }) {
                             <span className="text-severity-high">{dep.risk}</span>
                           ) : (dep.risk === 'MEDIUM' || dep.risk === 'MODERATE') ? (
                             <span className="text-severity-moderate font-medium">{dep.risk}</span>
+                          ) : (dep.risk || '').toUpperCase() === 'UNKNOWN' ? (
+                            <span className="text-primary">{dep.risk}</span>
                           ) : (
                             <span className="text-severity-low">{dep.risk}</span>
                           )}
@@ -692,12 +859,18 @@ export default function Dashboard({ githubToken }) {
                           {dep.direct ? 'Direct' : 'Transitive'}
                         </div>
                         <div className="col-span-1 flex justify-end">
-                          <button className="text-muted group-hover:text-primary transition-colors">
-                            <ArrowRight size={18} />
-                          </button>
+                          {(dep.risk || '').toUpperCase() === 'UNKNOWN' ? (
+                            <span className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink">Review</span>
+                          ) : (
+                            <button className="text-muted group-hover:text-primary transition-colors">
+                              <ArrowRight size={18} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))
+                  ) : (scanResult.dependencies || []).length > 0 ? (
+                    <div className="py-8 text-center text-muted">No dependencies match your search or filters.</div>
                   ) : (
                     <div className="py-8 text-center text-muted">
                       {showOnlyVulnerable ? 'No medium, high or critical vulnerabilities found.' : 'No vulnerabilities found! Your dependencies are secure.'}

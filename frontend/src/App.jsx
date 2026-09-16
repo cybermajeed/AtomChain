@@ -59,7 +59,9 @@ function AppContent() {
           <button title="Settings" className="sidebar-link w-full text-left"><GearSix size={21} /><span className="sidebar-label whitespace-nowrap">Settings</span></button>
           <div className="my-2 h-px bg-white/[0.07]" />
           <div title={githubUser?.name || githubUser?.login || "Profile"} className="sidebar-link cursor-default">
-            {githubUser?.avatar_url ? <img src={githubUser.avatar_url} className="h-6 w-6 shrink-0 rounded-full object-cover" alt="" /> : <UserCircle size={24} />}
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-primary bg-primary/10 shadow-[0_0_12px_rgba(255,92,0,.4)]">
+              {githubUser?.avatar_url ? <img src={githubUser.avatar_url} className="h-6 w-6 rounded-full object-cover" alt="" /> : <UserCircle size={20} weight="fill" className="text-primary" />}
+            </span>
             <span className="sidebar-label min-w-0 flex-1 truncate whitespace-nowrap">{githubUser?.login || "My profile"}</span>
           </div>
           <button onClick={() => handleSetToken("")} title="Sign out" className="sidebar-link w-full text-left text-muted hover:!text-trading-down"><SignOut size={20} /><span className="sidebar-label whitespace-nowrap">Sign out</span></button>

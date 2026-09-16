@@ -208,7 +208,7 @@ export default function DependencyGraph({ dependencies, riskFilter, reconstructK
   }, [dependencies, riskFilter, reconstructKey, setNodes, setEdges]);
 
   return (
-    <div className="relative w-full h-[600px] bg-canvas-dark rounded-xl border border-hairline-on-dark overflow-hidden">
+    <div className="dg-flow relative w-full h-[600px] bg-canvas-dark rounded-xl border border-hairline-on-dark overflow-hidden">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -228,9 +228,7 @@ export default function DependencyGraph({ dependencies, riskFilter, reconstructK
           maskColor="rgba(11, 14, 17, 0.7)"
           style={{ backgroundColor: '#0B0E11', border: '1px solid #2A2F38', borderRadius: '8px' }}
         />
-        <Controls 
-           className="bg-surface-elevated-dark border border-hairline-on-dark rounded-md fill-on-dark shadow-xl"
-        />
+        <Controls position="top-right" />
       </ReactFlow>
 
       {/* Legend */}
