@@ -236,15 +236,8 @@ export default function Dashboard({ githubToken }) {
     setIsLocalMenuOpen((o) => !o);
   }
 
-  const handleChooseFolder = async () => {
+  const handleChooseFolder = () => {
     setIsLocalMenuOpen(false);
-    if (window.electronAPI?.selectDirectory) {
-      const dir = await window.electronAPI.selectDirectory();
-      if (dir) {
-        setLocalPath(dir);
-        return;
-      }
-    }
     if (folderInputRef.current) {
       folderInputRef.current.click();
     }
@@ -258,6 +251,7 @@ export default function Dashboard({ githubToken }) {
   }
 
   const handleFolderChange = async (e) => {
+    // Web-only fallback: read manifests from browser FileList and upload content
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
@@ -292,7 +286,6 @@ export default function Dashboard({ githubToken }) {
       return;
     }
 
-    // Initiate scan with uploaded manifests
     setIsScanning(true);
     setScanResult(null);
     setSelectedFinding(null);
@@ -307,7 +300,9 @@ export default function Dashboard({ githubToken }) {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to initiate scan from manifest files.');
+        let msg = errorData.detail || 'Failed to initiate scan from manifest files.';
+        if (typeof msg !== 'string') msg = Array.isArray(msg) ? msg[0]?.msg : JSON.stringify(msg);
+        throw new Error(msg);
       }
       const data = await res.json();
       setPollingId(data.scan_id);
@@ -341,7 +336,9 @@ export default function Dashboard({ githubToken }) {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to initiate zip scan.');
+        let msg = errorData.detail || 'Failed to initiate zip scan.';
+        if (typeof msg !== 'string') msg = Array.isArray(msg) ? msg[0]?.msg : JSON.stringify(msg);
+        throw new Error(msg);
       }
       const data = await res.json();
       setPollingId(data.scan_id);
@@ -435,7 +432,9 @@ export default function Dashboard({ githubToken }) {
       })
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to initiate local scan. Make sure the path is correct and contains a supported dependency manifest (package.json, requirements.txt, go.mod, pyproject.toml, etc.).');
+        let msg = errorData.detail || 'Failed to initiate local scan. Make sure the path is correct and contains a supported dependency manifest (package.json, requirements.txt, go.mod, pyproject.toml, etc.).';
+        if (typeof msg !== 'string') msg = Array.isArray(msg) ? msg[0]?.msg : JSON.stringify(msg);
+        throw new Error(msg);
       }
       const data = await res.json()
       setPollingId(data.scan_id)
@@ -649,7 +648,7 @@ export default function Dashboard({ githubToken }) {
           <div className="flex h-[46px] items-center gap-2 rounded-[22px] bg-[#1d1d1d] px-3 ring-1 ring-white/[0.12] shadow-[inset_0_0_50px_rgba(255,255,255,.02)]">
             <Globe size={20} className="shrink-0 text-primary" /><input id="repo-input" type="text" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} onFocus={openRepoDropdown} placeholder="Enter GitHub repository" className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-[#8b8b8b]" onKeyDown={(e) => { if (e.key === 'Enter' && repoUrl) handleScan(); if (e.key === 'Escape') setIsRepoDropdownOpen(false) }} />
             <div><button type="button" onClick={toggleRepoDropdown} disabled={isScanning} title="Your repositories" className="grid h-8 w-8 place-items-center rounded-lg text-muted transition-colors hover:bg-white/[.05] hover:text-primary"><CaretDown size={18} className={isRepoDropdownOpen ? 'rotate-180' : ''} /></button></div>
-            <div ref={localMenuRef} className="relative"><button onClick={handleFolderClick} disabled={isScanning} title="Select a local file, folder or zip" className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-white/[.05] hover:text-primary disabled:opacity-40"><Folder size={19} /></button>{isLocalMenuOpen && <div className="absolute right-0 top-[calc(100%+10px)] z-[9999] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#1c1815] shadow-2xl"><div className="border-b border-white/[.07] px-4 py-3 text-xs font-semibold text-on-dark">Import local project</div><button type="button" onClick={handleChooseFolder} className="flex w-full items-center gap-3 border-b border-white/[.05] px-4 py-3 text-left hover:bg-white/[.04]"><Folder size={16} className="text-primary" /><span className="min-w-0 flex-1 truncate text-sm text-on-dark">Upload folder</span></button><button type="button" onClick={handleChooseZip} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[.04]"><FileArchive size={16} className="text-primary" /><span className="min-w-0 flex-1 truncate text-sm text-on-dark">Upload ZIP file</span></button></div>}</div>
+            <div ref={localMenuRef} className="relative"><button onClick={handleFolderClick} disabled={isScanning} title="Select a local folder or zip" className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-white/[.05] hover:text-primary disabled:opacity-40"><Folder size={19} /></button>{isLocalMenuOpen && <div className="absolute right-0 top-[calc(100%+10px)] z-[9999] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#1c1815] shadow-2xl"><div className="border-b border-white/[.07] px-4 py-3 text-xs font-semibold text-on-dark">Import local project</div><button type="button" onClick={handleChooseFolder} className="flex w-full items-center gap-3 border-b border-white/[.05] px-4 py-3 text-left hover:bg-white/[.04]"><Folder size={16} className="text-primary" /><span className="min-w-0 flex-1 truncate text-sm text-on-dark">Upload folder</span></button><button type="button" onClick={handleChooseZip} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[.04]"><FileArchive size={16} className="text-primary" /><span className="min-w-0 flex-1 truncate text-sm text-on-dark">Upload ZIP file</span></button></div>}</div>
           </div>
           </BorderBeam>
 
@@ -662,7 +661,8 @@ export default function Dashboard({ githubToken }) {
             className="absolute left-0 right-0 top-[calc(100%+10px)] z-[9999]"
           />
 
-          <input type="file" ref={folderInputRef} webkitdirectory="" directory="" className="hidden" onChange={handleFolderChange} /><input type="file" ref={zipInputRef} accept=".zip" className="hidden" onChange={handleZipChange} />
+          <input type="file" ref={folderInputRef} webkitdirectory="" directory="" className="hidden" onChange={handleFolderChange} />
+          <input type="file" ref={zipInputRef} accept=".zip" className="hidden" onChange={handleZipChange} />
         </div>
         {!scanResult && !isScanning && <div className="mx-auto mt-12 max-w-3xl"><h2 className="mb-3 text-sm font-semibold text-on-dark">History</h2><div className="max-h-[calc(100vh-270px)] overflow-y-auto rounded-[18px] border border-white/[.08] bg-surface-card-dark/60 p-1">{history.length ? history.map((scan) => <button key={scan.id} onClick={() => scan.status === 'COMPLETED' && setPollingId(scan.id)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 rounded-[13px] px-4 py-3 text-left hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${scan.status === 'COMPLETED' ? 'bg-trading-up' : scan.status === 'FAILED' ? 'bg-trading-down' : 'bg-primary'}`} /><span className="min-w-0"><span className="block truncate text-sm text-on-dark">{(scan.repository_url || 'Local analysis').replace(/^(zip|local|folder):\/\//, '')}</span><span className="mt-0.5 block text-xs text-muted">{new Date(scan.timestamp).toLocaleString()}</span></span><span className="text-xs text-muted">{scan.score ?? '—'}%</span></button>) : <div className="flex min-h-40 items-center justify-center rounded-[14px] border border-dashed border-white/[.08] text-sm text-muted">Previously analyzed repositories and local projects will appear here.</div>}</div></div>}
       </section>
