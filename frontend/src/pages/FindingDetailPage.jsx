@@ -891,7 +891,7 @@ export default function FindingDetailPage() {
 
   if (pageLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center py-20 bg-canvas-dark text-on-dark">
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-on-dark">
         <CircleNotch size={32} className="text-primary animate-spin mb-4" />
         <p className="text-body-md text-muted font-medium">
           Loading vulnerability details...
@@ -902,7 +902,7 @@ export default function FindingDetailPage() {
 
   if (!finding) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center py-20 bg-canvas-dark text-on-dark px-6">
+      <div className="flex-1 flex flex-col items-center justify-center py-20 text-on-dark px-6">
         <Warning size={48} className="text-trading-down mb-4 opacity-60" />
         <h2 className="text-title-lg text-on-dark mb-2">
           Vulnerability Finding Not Found
@@ -932,7 +932,7 @@ export default function FindingDetailPage() {
   ).toUpperCase();
 
   return (
-    <div className="flex-1 bg-canvas-dark text-on-dark flex flex-col min-h-screen py-6">
+    <div className="flex-1 text-on-dark flex flex-col min-h-screen py-6">
       {/* Sub Page Header */}
       <div className="bento mx-auto w-full max-w-[1500px] shrink-0 px-5 py-4 md:px-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">

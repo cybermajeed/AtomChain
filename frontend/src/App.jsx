@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Investigator from "./pages/Investigator";
 import TrustLedger from "./pages/TrustLedger";
 import FindingDetailPage from "./pages/FindingDetailPage";
+import BeamsBackground from "./components/ui/beams-background";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: SquaresFour },
@@ -38,10 +39,21 @@ function AppContent() {
     return () => { cancelled = true; };
   }, [githubToken]);
 
-  if (!githubToken) return <Routes><Route path="*" element={<Login setToken={handleSetToken} />} /></Routes>;
+  if (!githubToken)
+    return (
+      <div className="relative min-h-screen overflow-hidden">
+<BeamsBackground />
+        <div className="relative z-10">
+          <Routes>
+            <Route path="*" element={<Login setToken={handleSetToken} />} />
+          </Routes>
+        </div>
+      </div>
+    );
 
   return (
-    <div className="app-shell min-h-screen text-body font-sans">
+    <div className="app-shell relative min-h-screen text-body font-sans">
+      <BeamsBackground />
       <aside className="app-sidebar group fixed inset-y-3 left-3 z-50 flex w-[68px] flex-col rounded-[22px] border border-white/[0.08] bg-[#0e0e0e]/90 px-2 py-3 shadow-2xl backdrop-blur-xl transition-[width] duration-300 hover:w-[238px]">
         <NavLink to="/dashboard" className="nav-brand flex h-12 items-center gap-3 rounded-xl px-2 text-on-dark" title="AtomChain">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-ink shadow-[0_0_24px_rgba(255,145,38,.3)]"><Atom size={20} weight="bold" /></span>
@@ -67,7 +79,7 @@ function AppContent() {
           <button onClick={() => handleSetToken("")} title="Sign out" className="sidebar-link w-full text-left text-muted hover:!text-trading-down"><SignOut size={20} /><span className="sidebar-label whitespace-nowrap">Sign out</span></button>
         </div>
       </aside>
-      <main className="min-h-screen pl-[92px] pr-4 md:pr-6">
+      <main className="relative z-10 min-h-screen pl-[92px] pr-4 md:pr-6">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" />} />
           <Route path="/dashboard" element={<Dashboard githubToken={githubToken} />} />
