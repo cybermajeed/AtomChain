@@ -6,9 +6,11 @@
 
 <img src="assets/hero-scan.svg" alt="AtomChain radar scan" width="340" />
 
-[![Status](https://img.shields.io/badge/status-alpha-fcd535?style=for-the-badge&labelColor=181a20)](https://github.com/anomalyco/opencode)
-[![Version](https://img.shields.io/badge/version-1.0-0ecb81?style=for-the-badge&labelColor=181a20)](https://github.com/anomalyco/opencode)
-[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20web-929aa5?style=for-the-badge&labelColor=181a20)](#-desktop-app)
+<div align="center">
+
+[![Status](https://img.shields.io/badge/status-alpha-fcd535?style=for-the-badge&labelColor=181a20)](#)
+[![Version](https://img.shields.io/badge/version-1.0-0ecb81?style=for-the-badge&labelColor=181a20)](#)
+[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20web%20%7C%20docker-929aa5?style=for-the-badge&labelColor=181a20)](#-getting-started)
 
 </div>
 
@@ -16,9 +18,9 @@
 
 ## 🧭 What is it?
 
-**AtomChain** is an end-to-end **dependency & supply-chain security scanner** that runs 100% locally. It pulls a project (GitHub repo, local folder, or ZIP), maps its dependency graph, cross-references vulnerabilities with **OSV**, scores the blast radius with a **risk engine**, and then hands every finding to an **AI investigator** backed by live web research — all inside a Python + React desktop app.
+**AtomChain** is an AI-powered platform that scans GitHub or local repositories to detect vulnerable or suspicious dependencies, assess risk, and provide evidence-based remediation recommendations for human review. 
 
-> Everything is stored in a local SQLite store. Your scans, your data. No cloud, no telemetry.
+A **blockchain-inspired Trust Ledger** securely records scan results and security decisions to ensure integrity and traceability. The platform supports **npm and Python** ecosystems out-of-the-box, providing a seamless pipeline from dependency parsing to AI-assisted security triaging.
 
 ---
 
@@ -27,39 +29,40 @@
 | Marker | Capability | Where |
 |--------|-----------|-------|
 | <img src="https://img.shields.io/badge/github-scan-0ecb81" alt=""/> | Clone & scan **public/private GitHub repos** (OAuth or PAT) | `backend/scanner/` |
-| <img src="https://img.shields.io/badge/local-folder-fcd535" alt=""/> | Scan **local directories** or **ZIP uploads** (native folder picker in desktop) | `backend/scanner/zip_manager.py` |
+| <img src="https://img.shields.io/badge/local-folder-fcd535" alt=""/> | Scan **local directories** or **ZIP uploads** | `backend/scanner/zip_manager.py` |
 | <img src="https://img.shields.io/badge/npm--parser-3b82f6" alt=""/> | Parse `package.json` / `package-lock.json` manifests | `backend/parsers/npm_parser.py` |
 | <img src="https://img.shields.io/badge/python--parser-3b82f6" alt=""/> | Parse Python dependency manifests & requirements | `backend/parsers/python_parser.py` |
-| <img src="https://img.shields.io/badge/osv-cve-f6465d" alt=""/> | Vulnerability lookup via **OSV.dev** database | `backend/intelligence/osv_client.py` |
-| <img src="https://img.shields.io/badge/risk-engine-fcd535" alt=""/> | Severity scoring + dependency **graph / blast radius** | `backend/risk/` · `backend/dependency/` |
-| <img src="https://img.shields.io/badge/ai-investigator-2dbdb6" alt=""/> | **Groq / Gemini** analyst + **Tavily**-backed web research on each finding | `intelligence/` |
-| <img src="https://img.shields.io/badge/trust-ledger-0ecb81" alt=""/> | Reusable **Trust Ledger** of vetted dependencies | `backend/trust/ledger.py` |
-| <img src="https://img.shields.io/badge/desktop-electron-929aa5" alt=""/> | **Electron** desktop shell bundling the Python backend | `frontend/electron/` |
+| <img src="https://img.shields.io/badge/osv-cve-f6465d" alt=""/> | External vulnerability intelligence via **OSV.dev** | `backend/intelligence/osv_client.py` |
+| <img src="https://img.shields.io/badge/risk-engine-fcd535" alt=""/> | Contextual priority scoring + dependency **graph / blast radius** | `backend/risk/` · `backend/dependency/` |
+| <img src="https://img.shields.io/badge/ai-investigator-2dbdb6" alt=""/> | **Groq / Gemini** analyst + **Tavily** web research for explainable assessment | `intelligence/` |
+| <img src="https://img.shields.io/badge/trust-ledger-0ecb81" alt=""/> | Tamper-evident **Trust Ledger** for history of SBOMs and remediation | `backend/trust/ledger.py` |
+| <img src="https://img.shields.io/badge/desktop-electron-929aa5" alt=""/> | **Electron / Docker** application bundling | `frontend/` · `docker-compose.yml` |
 
 ---
 
-## 🔄 How a scan flows
+## 🔄 Architecture & Workflow
 
 ```mermaid
 flowchart LR
-    A[Repo / Folder / ZIP] --> B[Clone & fetch manifests]
-    B --> C[Parse npm + Python deps]
-    C --> D[Build dependency graph]
-    C --> E[OSV vulnerability lookup]
-    D & E --> F[Risk engine scoring]
-    F --> G[SQLite store]
-    G --> H[AI Investigator + Tavily research]
-    H --> I[Dashboard / Finding detail / Trust Ledger]
+    A[Repo / ZIP / GitHub] -->|1. SCAN| B[Clone & Fetch Manifests]
+    B -->|2. ANALYZE| C[Parse npm + Python Deps]
+    C -->|3. CORRELATE| D[Dependency Graph]
+    C --> E[OSV Intelligence]
+    D & E -->|4. ASSESS| F[Risk Engine Scoring]
+    F --> G[SQLite Store]
+    G -->|5. EXPLAIN| H[AI Evidence Layer]
+    H --> I[Human Review Dashboard]
+    I -->|6. VERIFY| J[Trust Ledger]
 ```
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Technical Architecture
 
 ```mermaid
 flowchart TB
-    subgraph Desktop["🖥️ Desktop Shell"]
-        E[Electron 44]
+    subgraph Client["🖥️ Client Interface"]
+        E[Electron / Browser]
     end
     subgraph Frontend["⚛️ Frontend · React 19 + Vite 8"]
         V[Dashboard] --> F[Finding Detail]
@@ -75,10 +78,15 @@ flowchart TB
         API --> AI[Groq / Gemini analyst]
         AI --> W[Tavily research + cache]
     end
+    subgraph Deployment["🐳 Infrastructure"]
+        DK[Docker Compose]
+    end
     E --> V
     F --> API
     I --> AI
     T --> D
+    DK -.-> Frontend
+    DK -.-> Backend
 ```
 
 ---
@@ -92,7 +100,7 @@ flowchart TB
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=fff&labelColor=181a20)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.13-3776ab?style=flat-square&logo=python&logoColor=fff&labelColor=181a20)](https://python.org)
 [![SQLite](https://img.shields.io/badge/SQLite-003b57?style=flat-square&logo=sqlite&logoColor=fff&labelColor=181a20)](https://sqlite.org)
-[![NetworkX](https://img.shields.io/badge/NetworkX-5395e5?style=flat-square&labelColor=181a20)](https://networkx.org)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=fff&labelColor=181a20)](https://docker.com)
 [![Groq](https://img.shields.io/badge/Groq-f55036?style=flat-square&logo=groq&logoColor=fff&labelColor=181a20)](https://groq.com)
 [![Gemini](https://img.shields.io/badge/Gemini-8e75b2?style=flat-square&logo=googlegemini&logoColor=fff&labelColor=181a20)](https://ai.google.dev)
 
@@ -101,23 +109,33 @@ flowchart TB
 ## 📦 Getting started
 
 ### Prerequisites
-- [Node.js](https://nodejs.org) **20+** · npm **10+**
-- [Python](https://python.org) **3.13**
-- `git` available on `PATH`
+- [Docker](https://www.docker.com/) & Docker Compose (Recommended)
+- **OR** [Node.js](https://nodejs.org) **20+** & [Python](https://python.org) **3.11+**
 
-### 1 · Backend (FastAPI)
+### 🐳 1 · Recommended: Run with Docker Compose
+
+The easiest way to run the entire stack (Backend + Frontend) is via Docker.
+
+```bash
+docker-compose up --build
+```
+
+- API Server: `http://localhost:8000`
+- React Dashboard: `http://localhost:5173`
+
+> 🔑 **Important:** Before running, copy `backend/.env.example` to `backend/.env` and add your API keys — see [Environment](#-environment-variables).
+
+### 2 · Manual Setup: Backend (FastAPI)
 
 ```bash
 cd backend
 python -m venv .venv
 .venv\Scripts\activate                 # Windows · use .venv/bin/activate on macOS/Linux
-pip install fastapi uvicorn httpx python-dotenv pydantic sqlalchemy networkx requests groq google-genai
+pip install -r requirements.txt
 python main.py                         # → http://127.0.0.1:8000
 ```
 
-> 🔑 Copy `backend/.env.example` → `.env` (or reuse existing `.env`) and add your keys — see [Environment](#-environment-variables).
-
-### 2 · Frontend (Vite)
+### 3 · Manual Setup: Frontend (Vite)
 
 ```bash
 cd frontend
@@ -125,7 +143,7 @@ npm install
 npm run dev                            # → http://localhost:5173
 ```
 
-### 3 · 🖥️ Run as a desktop app (Electron)
+### 4 · 🖥️ Run as a desktop app (Electron)
 
 ```bash
 cd frontend
@@ -137,6 +155,8 @@ npm run electron:dev                   # boots Vite + launches Electron, Python 
 ---
 
 ## 🔑 Environment variables
+
+Located in `backend/.env`:
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -150,22 +170,23 @@ npm run electron:dev                   # boots Vite + launches Electron, Python 
 ## 📁 Repository structure
 
 ```text
-atomchain/
+AtomChain/
 ├── backend/              # FastAPI server, scanners, risk + trust engines
 │   ├── scanner/          #   Git clone, GitHub API, ZIP ingestion
 │   ├── parsers/          #   npm & Python manifest parsers
 │   ├── risk/             #   Severity / blast-radius scoring
 │   ├── dependency/       #   Dependency graph builder (NetworkX)
 │   ├── trust/            #   Vetted dependency Trust Ledger
-│   └── ai/               #   AI investigator (Gemini)
+│   └── ai/               #   AI investigator (Gemini/Groq)
 ├── intelligence/         # Shared engine layer
-│   ├── ai/               #   Groq analyst + prompts + schemas
+│   ├── ai/               #   Analyst prompts + schemas
 │   ├── research/         #   Tavily client, query builder, source ranking
 │   └── cache.py          #   TTL cache for research & lookups
 ├── frontend/             # React 19 + Vite + Tailwind
-│   ├── electron/         #   Desktop shell (spawns the Python backend)
+│   ├── electron/         #   Desktop shell
 │   ├── src/pages/        #   Dashboard, Finding Detail, Investigator, Trust Ledger, Login
 │   └── src/components/   #   Finding panel, AI scan summary, graph views
+├── docker-compose.yml    # Container orchestration
 └── assets/               # README media
 ```
 
@@ -183,7 +204,7 @@ atomchain/
 
 ---
 
-## 🗺️ Roadmap
+## 🗺️ Roadmap & Future Scope
 
 - [x] GitHub / local / ZIP source ingestion
 - [x] npm + Python manifest parsing
@@ -191,10 +212,11 @@ atomchain/
 - [x] Risk scoring + dependency graph
 - [x] Local-first SQLite persistence
 - [x] Electron desktop packaging
-- [ ] CI/CD pipeline for cross-platform builds
-- [ ] Rust (or WASM) scanning engine for hot-path parsing
-- [ ] SBOM export (SPDX / CycloneDX)
-- [ ] Realtime CVE monitoring subscriptions
+- [x] Docker deployment reproducibility
+- [x] Tree-sitter / Code-level reachability analysis
+- [ ] More ecosystems (Maven, Go, containers)
+- [ ] CI/CD and PR-level continuous assessment
+- [ ] Policy engine for organization-specific risk
 
 ---
 
@@ -205,6 +227,6 @@ Local open-source edition for the community. Runs entirely on your machine — s
 
 <div align="center">
 
-**Built with** ❤️ **+ <img src="https://img.shields.io/badge/React-61dafb?style=flat&logo=react" alt="React"/> · <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi" alt="FastAPI"/> · <img src="https://img.shields.io/badge/Electron-47848f?style=flat&logo=electron" alt="Electron"/> · <img src="https://img.shields.io/badge/OSV-f6465d?style=flat" alt="OSV"/>**
+**Built with** ❤️ **+ <img src="https://img.shields.io/badge/React-61dafb?style=flat&logo=react" alt="React"/> · <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi" alt="FastAPI"/> · <img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker" alt="Docker"/> · <img src="https://img.shields.io/badge/OSV-f6465d?style=flat" alt="OSV"/>**
 
 </div>
