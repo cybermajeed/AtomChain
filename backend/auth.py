@@ -50,6 +50,7 @@ async def github_login(request: Request):
         "redirect_uri": callback,
         "scope": OAUTH_SCOPE,
         "state": state,
+        "prompt": "login",
     }
     return RedirectResponse(f"{GITHUB_AUTHORIZE_URL}?{urlencode(params)}")
 

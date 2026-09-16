@@ -35,6 +35,7 @@ except Exception as e:
 
 from risk.engine import RiskEngine
 from auth import router as auth_router
+from trust.ledger import TrustLedger
 
 # ─── Intelligence layer imports ────────────────────────────────────────────────
 from ai.analyst import GroqAnalyst
@@ -414,6 +415,8 @@ def process_github_scan(scan_id: int, repo_url: str, github_token: Optional[str]
 
         _analyze_dependencies(scan_id, deps, db)
         scan.status = "COMPLETED"
+        findings_count = db.query(Finding).filter(Finding.scan_id == scan_id).count()
+        TrustLedger(db).record_scan(scan_id, f"Found {findings_count} vulnerabilities")
     except Exception as e:
         import traceback
         scan.status = "FAILED"
@@ -447,6 +450,8 @@ def process_zip_scan(scan_id: int, zip_bytes: bytes):
 
         _analyze_dependencies(scan_id, deps, db)
         scan.status = "COMPLETED"
+        findings_count = db.query(Finding).filter(Finding.scan_id == scan_id).count()
+        TrustLedger(db).record_scan(scan_id, f"Found {findings_count} vulnerabilities")
     except Exception as e:
         import traceback
         scan.status = "FAILED"

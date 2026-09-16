@@ -733,9 +733,32 @@ export default function FindingDetailPage() {
                   ? { ...d, is_reviewed: true, decision: tag }
                   : d,
               );
+              
+              const activeDeps = updatedDeps.filter(
+                (d) => !(d.is_reviewed && (d.decision === "ACCEPT" || d.decision === "REJECT"))
+              );
+              let maxRiskScore = 0;
+              let newLevel = "LOW";
+              if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "CRITICAL")) {
+                maxRiskScore = 95;
+                newLevel = "CRITICAL";
+              } else if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "HIGH")) {
+                maxRiskScore = 80;
+                newLevel = "HIGH";
+              } else if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "MEDIUM" || (d.risk || "").toUpperCase() === "MODERATE")) {
+                maxRiskScore = 50;
+                newLevel = "MEDIUM";
+              } else if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "LOW")) {
+                maxRiskScore = 20;
+                newLevel = "LOW";
+              } else {
+                maxRiskScore = 0;
+                newLevel = "LOW";
+              }
+
               localStorage.setItem(
                 "cached_scan_result",
-                JSON.stringify({ ...parsed, dependencies: updatedDeps }),
+                JSON.stringify({ ...parsed, dependencies: updatedDeps, score: maxRiskScore, level: newLevel }),
               );
             }
           }
@@ -958,7 +981,7 @@ export default function FindingDetailPage() {
                       : "bg-surface-elevated-dark border-white/[.1] text-primary hover:bg-primary/10 hover:border-primary/30"
                   }`}
                 >
-                  False Positive
+                  Reject
                 </button>
                 <button
                   onClick={() => handleReview("INVESTIGATE")}
