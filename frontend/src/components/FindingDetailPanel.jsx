@@ -62,19 +62,19 @@ class FindingPanelErrorBoundary extends Component {
 
 const severityColor = (sev) => {
   const s = (sev || '').toUpperCase()
-  if (s === 'CRITICAL') return 'text-trading-down'
-  if (s === 'HIGH')     return 'text-trading-down'
-  if (s === 'MEDIUM' || s === 'MODERATE') return 'text-primary'
-  return 'text-trading-up'
+  if (s === 'CRITICAL') return 'text-severity-critical'
+  if (s === 'HIGH')     return 'text-severity-high'
+  if (s === 'MEDIUM' || s === 'MODERATE') return 'text-severity-moderate'
+  return 'text-severity-low'
 }
 
 const priorityBadge = (p) => {
   const badges = {
-    critical: 'bg-trading-down/20 text-trading-down border border-trading-down/30',
-    high:     'bg-trading-down/10 text-trading-down border border-trading-down/20',
-    medium:   'bg-primary/15 text-primary border border-primary/30',
-    moderate: 'bg-primary/15 text-primary border border-primary/30',
-    low:      'bg-trading-up/10 text-trading-up border border-trading-up/30',
+    critical: 'bg-severity-critical/20 text-severity-critical border border-severity-critical/30',
+    high:     'bg-severity-high/10 text-severity-high border border-severity-high/20',
+    medium:   'bg-severity-moderate/15 text-severity-moderate border border-severity-moderate/30',
+    moderate: 'bg-severity-moderate/15 text-severity-moderate border border-severity-moderate/30',
+    low:      'bg-severity-low/10 text-severity-low border border-severity-low/30',
   }
   return badges[p?.toLowerCase()] || badges.medium
 }

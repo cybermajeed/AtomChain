@@ -10,25 +10,27 @@ import DependencyGraph from '../components/DependencyGraph'
 
 const severityColor = (sev) => {
   const s = (sev || '').toUpperCase()
-  if (s === 'CRITICAL' || s === 'HIGH') return 'text-trading-down'
-  if (s === 'MEDIUM' || s === 'MODERATE') return 'text-primary'
-  return 'text-trading-up'
+  if (s === 'CRITICAL') return 'text-severity-critical'
+  if (s === 'HIGH')     return 'text-severity-high'
+  if (s === 'MEDIUM' || s === 'MODERATE') return 'text-severity-moderate'
+  return 'text-severity-low'
 }
 
 const severityBg = (sev) => {
   const s = (sev || '').toUpperCase()
-  if (s === 'CRITICAL' || s === 'HIGH') return 'bg-trading-down'
-  if (s === 'MEDIUM' || s === 'MODERATE') return 'bg-primary'
-  return 'bg-trading-up'
+  if (s === 'CRITICAL') return 'bg-severity-critical'
+  if (s === 'HIGH')     return 'bg-severity-high'
+  if (s === 'MEDIUM' || s === 'MODERATE') return 'bg-severity-moderate'
+  return 'bg-severity-low'
 }
 
 const priorityBadge = (p) => {
   const badges = {
-    critical: 'bg-trading-down/20 text-trading-down border border-trading-down/30',
-    high:     'bg-trading-down/10 text-trading-down border border-trading-down/20',
-    medium:   'bg-primary/15 text-primary border border-primary/30',
-    moderate: 'bg-primary/15 text-primary border border-primary/30',
-    low:      'bg-trading-up/10 text-trading-up border border-trading-up/30',
+    critical: 'bg-severity-critical/20 text-severity-critical border border-severity-critical/30',
+    high:     'bg-severity-high/10 text-severity-high border border-severity-high/20',
+    medium:   'bg-severity-moderate/15 text-severity-moderate border border-severity-moderate/30',
+    moderate: 'bg-severity-moderate/15 text-severity-moderate border border-severity-moderate/30',
+    low:      'bg-severity-low/10 text-severity-low border border-severity-low/30',
   }
   return badges[p?.toLowerCase()] || badges.medium
 }
@@ -44,7 +46,7 @@ const confidenceBadge = (level) => {
 
 function VulnerabilityChartPie({ score = 75, severity = 'HIGH' }) {
   const sevUpper = (severity || 'HIGH').toUpperCase()
-  const baseColor = sevUpper === 'CRITICAL' || sevUpper === 'HIGH' ? '#FF4D4D' : sevUpper === 'MODERATE' || sevUpper === 'MEDIUM' ? '#FCD535' : '#00E676'
+  const baseColor = sevUpper === 'CRITICAL' ? '#9f1239' : sevUpper === 'HIGH' ? '#ef4444' : sevUpper === 'MODERATE' || sevUpper === 'MEDIUM' ? '#eab308' : '#22c55e'
   
   const slices = [
     { label: 'Base CVSS Severity', pct: 40, color: baseColor },
@@ -513,6 +515,8 @@ export default function FindingDetailPage() {
   const [loadingStep, setLoadingStep] = useState(0)
   const [error, setError] = useState(null)
   const [pageLoading, setPageLoading] = useState(!finding)
+  const [riskFilter, setRiskFilter] = useState(['SAFE', 'MODERATE', 'HIGH', 'CRITICAL'])
+  const [reconstructKey, setReconstructKey] = useState(0)
 
   const stepInterval = useRef(null)
 
@@ -613,21 +617,21 @@ export default function FindingDetailPage() {
   const severityVal = (finding.risk || finding.severity || 'HIGH').toUpperCase()
 
   return (
-    <div className="flex-1 bg-canvas-dark text-on-dark flex flex-col min-h-screen">
+    <div className="flex-1 bg-canvas-dark text-on-dark flex flex-col min-h-screen py-6">
       {/* Sub Page Header */}
-      <div className="border-b border-hairline-on-dark bg-surface-dark px-6 py-5 shrink-0 shadow-md">
-        <div className="max-w-[1280px] mx-auto flex items-center justify-between gap-4 flex-wrap">
+      <div className="bento mx-auto w-full max-w-[1500px] shrink-0 px-5 py-4 md:px-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 rounded-lg bg-surface-elevated-dark hover:bg-surface-card-dark text-muted hover:text-on-dark transition-colors border border-hairline-on-dark"
+              className="p-2 rounded-xl bg-white/[.04] hover:bg-primary/10 text-muted hover:text-primary transition-colors border border-white/[.07]"
               title="Back"
             >
               <ArrowLeft size={18} />
             </button>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-title-lg text-on-dark font-semibold">
+                <p className="eyebrow mb-1">Dependency intelligence</p><h1 className="text-title-lg text-on-dark font-semibold">
                   {finding.package_name || pkgName}
                 </h1>
                 <span className="font-plex text-body-md text-primary">v{finding.version || pkgVersion}</span>
@@ -664,16 +668,16 @@ export default function FindingDetailPage() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="border-b border-hairline-on-dark bg-surface-dark px-6 shrink-0">
-        <div className="max-w-[1280px] mx-auto flex gap-6">
+      <div className="mx-auto mt-3 flex w-full max-w-[1500px] gap-2 rounded-xl border border-white/[.06] bg-white/[.025] p-1.5">
+        <div className="flex gap-1">
           <button
-            className={`py-3.5 text-body-md font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-on-dark'}`}
+            className={`rounded-lg px-4 py-2.5 text-body-md font-medium transition-colors flex items-center gap-2 ${activeTab === 'overview' ? 'bg-primary/10 text-primary' : 'text-muted hover:text-on-dark'}`}
             onClick={() => setActiveTab('overview')}
           >
             <ChartBar size={16} /> Overview & Remediation
           </button>
           <button
-            className={`py-3.5 text-body-md font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'tree' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-on-dark'}`}
+            className={`rounded-lg px-4 py-2.5 text-body-md font-medium transition-colors flex items-center gap-2 ${activeTab === 'tree' ? 'bg-primary/10 text-primary' : 'text-muted hover:text-on-dark'}`}
             onClick={() => setActiveTab('tree')}
           >
             <GitFork size={16} /> Dependency Node Tree Graph
@@ -682,34 +686,35 @@ export default function FindingDetailPage() {
       </div>
 
       {/* Main Content Body */}
-      <div className="max-w-[1280px] mx-auto w-full px-6 py-8 flex-1">
+      <div className="max-w-[1500px] mx-auto w-full py-6 flex-1">
         {activeTab === 'tree' && (
           <div className="space-y-4 h-full flex flex-col">
-            <div>
-              <h2 className="text-title-md text-on-dark mb-1">Dependency Topological Node Tree</h2>
-              <p className="text-body-sm text-muted">
+            <div className="bento flex items-center justify-between gap-4 p-5">
+              <div><p className="eyebrow mb-1">Topology explorer</p><h2 className="text-title-md text-on-dark mb-1">Dependency Topological Node Tree</h2><p className="text-body-sm text-muted">
                 Visualizing how <strong className="text-on-dark">{finding.package_name || pkgName}</strong> connects into your project tree.
-              </p>
+              </p></div>
+              <button onClick={() => setReconstructKey(k => k + 1)} className="shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-ink hover:bg-primary-active">Reconstruct graph</button>
             </div>
-            <div className="h-[600px] bg-surface-dark border border-hairline-on-dark rounded-2xl overflow-hidden relative shadow-2xl">
+            <div className="bento grid-noise h-[600px] overflow-hidden p-2 relative">
               {dependencies ? (
-                <DependencyGraph dependencies={dependencies} />
+                <DependencyGraph dependencies={dependencies} riskFilter={riskFilter} reconstructKey={reconstructKey} />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <p className="text-muted">No dependency graph available for this scan.</p>
                 </div>
               )}
             </div>
+            <div className="bento flex flex-wrap items-center gap-3 p-4"><span className="eyebrow mr-2">Show nodes</span>{[['Safe','SAFE','bg-severity-low','text-severity-low','border-severity-low/40'],['Moderate','MODERATE','bg-severity-moderate','text-severity-moderate','border-severity-moderate/40'],['High','HIGH','bg-severity-high','text-severity-high','border-severity-high/40'],['Critical','CRITICAL','bg-severity-critical','text-severity-critical','border-severity-critical/40']].map(([label, level, color, textColor, activeBorder]) => { const active = riskFilter.includes(level); return <button key={label} onClick={() => setRiskFilter(prev => prev.includes(level) ? prev.filter(x => x !== level) : [...prev, level])} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${active ? `${activeBorder} ${textColor} bg-white/[.04]` : 'border-white/[.07] bg-white/[.025] text-muted opacity-50 hover:opacity-80'}`}><span className={`h-2 w-2 rounded-full ${color} ${active ? '' : 'opacity-40'}`} />{label}</button> })}</div>
           </div>
         )}
 
         {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Column: Risk Score, Pie Chart, History Map & Quick Qs */}
-            <div className="lg:col-span-5 space-y-6">
+            <div className="lg:col-span-8 lg:order-2 space-y-6">
               
               {/* Vulnerability Pie Chart Breakdown */}
-              <div className="bg-surface-card-dark rounded-2xl p-6 border border-hairline-on-dark shadow-xl">
+              <div className="bento p-6">
                 <h3 className="text-title-sm text-on-dark mb-4 flex items-center gap-2">
                   <ChartPie size={16} className="text-primary" /> Risk Component Pie Distribution
                 </h3>
@@ -717,7 +722,7 @@ export default function FindingDetailPage() {
               </div>
 
               {/* Vulnerability History Map & Lifecycle Graph */}
-              <div className="bg-surface-card-dark rounded-2xl p-6 border border-hairline-on-dark shadow-xl">
+              <div className="bento p-6">
                 <VulnerabilityHistoryGraph
                   version={finding.version || pkgVersion}
                   vulnId={finding.vulnerability_id || 'CVE-2021-23337'}
@@ -725,27 +730,18 @@ export default function FindingDetailPage() {
                 />
               </div>
 
-              {/* Quick AI Questions */}
-              <div className="bg-surface-card-dark rounded-2xl p-6 border border-hairline-on-dark shadow-xl">
-                <h3 className="text-title-sm text-on-dark mb-3 flex items-center gap-2">
-                  <Brain size={16} className="text-primary" /> Quick Security Questions
-                </h3>
-                <div className="grid grid-cols-1 gap-2.5">
-                  {QUICK_QUESTIONS.map((qq, i) => (
-                    <QuickQuestion
-                      key={i}
-                      label={qq.label}
-                      disabled={loading}
-                      onClick={() => runAnalysis(qq.type, qq.q)}
-                    />
-                  ))}
-                </div>
-              </div>
-
             </div>
 
             {/* Right Column: AI Security Assessment & Real-time Intelligence */}
-            <div className="lg:col-span-7 space-y-6">
+            <div className="lg:col-span-4 lg:order-1 space-y-6">
+              <aside className="bento overflow-hidden p-5">
+                <p className="eyebrow">Exposure score</p>
+                <div className="my-4 flex items-end gap-3"><span className={`text-6xl font-semibold tracking-tighter ${severityColor(severityVal)}`}>{riskScoreVal}</span><span className="mb-2 text-sm text-muted">/ 100</span></div>
+                <div className={`mb-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 ${severityVal === 'CRITICAL' ? 'border-severity-critical/40 bg-severity-critical/10 text-severity-critical' : severityVal === 'HIGH' ? 'border-severity-high/30 bg-severity-high/10 text-severity-high' : severityVal === 'MEDIUM' || severityVal === 'MODERATE' ? 'border-severity-moderate/30 bg-severity-moderate/10 text-severity-moderate' : 'border-severity-low/30 bg-severity-low/10 text-severity-low'}`}><span className="h-2 w-2 rounded-full bg-current" /><span className="text-xs font-semibold uppercase tracking-[.12em]">{severityVal} seriousness</span></div>
+                <div className="border-t border-white/[.07] pt-4"><p className="eyebrow mb-3">Quick security questions</p><div className="space-y-2">{QUICK_QUESTIONS.map((qq, i) => <QuickQuestion key={i} label={qq.label} disabled={loading} onClick={() => runAnalysis(qq.type, qq.q)} />)}</div></div>
+                <button onClick={() => navigate('/investigator')} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-semibold text-ink hover:bg-primary-active"><Brain size={16}/> Open AI chat</button>
+                <button onClick={() => runAnalysis('vulnerability')} disabled={loading} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/[.1] bg-white/[.03] py-3 text-xs font-semibold text-body hover:border-primary/40 hover:text-primary"><Lightning size={16}/> Research again</button>
+              </aside>
               {loading && <LoadingSteps step={loadingStep} />}
 
               {error && !loading && (
@@ -765,11 +761,11 @@ export default function FindingDetailPage() {
               )}
 
               {!analysis && !loading && !error && (
-                <div className="bg-surface-card-dark rounded-2xl p-8 border border-hairline-on-dark text-center shadow-xl">
+                <div className="bento p-8 text-center">
                   <Brain size={48} className="text-primary mx-auto mb-4 opacity-40 animate-pulse" />
                   <h3 className="text-title-md text-on-dark font-semibold mb-2">Deep AI Security Analysis</h3>
                   <p className="text-body-sm text-muted max-w-md mx-auto mb-6">
-                    Click any quick question on the left or press "Run AI Security Scan" to generate an authoritative patch analysis powered by Groq and Tavily real-time research.
+                    Click any quick security question or press "Run AI Security Scan" to generate an authoritative patch analysis powered by Groq and Tavily real-time research.
                   </p>
                   <button
                     onClick={() => runAnalysis('vulnerability')}

@@ -1,200 +1,82 @@
-import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Clock, SignOut } from "@phosphor-icons/react";
+import { SquaresFour, ShieldCheck, Brain, GearSix, UserCircle, Atom, SignOut } from "@phosphor-icons/react";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Investigator from "./pages/Investigator";
 import TrustLedger from "./pages/TrustLedger";
 import FindingDetailPage from "./pages/FindingDetailPage";
-import HistoryPanel from "./components/HistoryPanel";
+
+const navItems = [
+  { to: "/dashboard", label: "Dashboard", icon: SquaresFour },
+  { to: "/ledger", label: "Trust Ledger", icon: ShieldCheck },
+  { to: "/investigator", label: "AI Investigator", icon: Brain },
+];
 
 function AppContent() {
-  const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '')
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [githubToken, setGithubToken] = useState(localStorage.getItem("github_token") || "");
   const [githubUser, setGithubUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('github_user'))
-    } catch {
-      return null
-    }
+    try { return JSON.parse(localStorage.getItem("github_user")); } catch { return null; }
   });
-  const navigate = useNavigate();
 
   const handleSetToken = (token) => {
-    setGithubToken(token)
-    localStorage.setItem('github_token', token)
-    if (!token) {
-      setGithubUser(null)
-      localStorage.removeItem('github_user')
-    }
-  }
+    setGithubToken(token);
+    localStorage.setItem("github_token", token);
+    if (!token) { setGithubUser(null); localStorage.removeItem("github_user"); }
+  };
 
   useEffect(() => {
-    if (!githubToken) return
-    let cancelled = false
-    fetch('https://api.github.com/user', {
-      headers: {
-        'Authorization': `Bearer ${githubToken}`,
-        'Accept': 'application/vnd.github.v3+json'
-      },
-      signal: AbortSignal.timeout(8000),
-    })
-      .then((res) => (res.ok ? res.json() : null))
+    if (!githubToken) return;
+    let cancelled = false;
+    fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${githubToken}`, Accept: "application/vnd.github.v3+json" }, signal: AbortSignal.timeout(8000) })
+      .then((res) => res.ok ? res.json() : null)
       .then((data) => {
-        if (cancelled || !data?.login) return
-        const user = { login: data.login, name: data.name, avatar_url: data.avatar_url }
-        setGithubUser(user)
-        localStorage.setItem('github_user', JSON.stringify(user))
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [githubToken])
+        if (cancelled || !data?.login) return;
+        const user = { login: data.login, name: data.name, avatar_url: data.avatar_url };
+        setGithubUser(user); localStorage.setItem("github_user", JSON.stringify(user));
+      }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [githubToken]);
 
-  const handleRescan = (scan) => {
-    // If it's a zip scan, we can't easily rescan without the file unless backend caches it.
-    // So we tell them to re-upload for now, or just redirect to dashboard
-    navigate("/dashboard", { state: { rescanUrl: scan.repository_url } });
-  };
-
-  const handleViewCached = (scanId) => {
-    navigate(`/dashboard?scan_id=${scanId}`);
-  };
+  if (!githubToken) return <Routes><Route path="*" element={<Login setToken={handleSetToken} />} /></Routes>;
 
   return (
-    <div className="min-h-screen bg-canvas-dark text-body font-sans flex flex-col">
-      {/* Top Navigation */}
-      <nav className="h-16 flex items-center justify-between px-6 bg-canvas-dark border-b border-hairline-on-dark relative z-10 shrink-0">
-        <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 bg-primary rounded flex items-center justify-center font-bold text-ink text-xl font-plex leading-none">
-              A
-            </div>
-            <span className="font-bold text-lg text-primary tracking-tight">ATOMCHAIN</span>
-          </Link>
-          {githubToken && (
-            <div className="hidden md:flex items-center gap-6 text-nav-link text-on-dark">
-              <Link
-                to="/dashboard"
-                className="hover:text-primary transition-colors flex items-center gap-1"
-              >
-                Dashboard
-              </Link>
-              <Link to="/ledger" className="hover:text-primary transition-colors">
-                Trust Ledger
-              </Link>
-              <Link to="/investigator" className="hover:text-primary transition-colors flex items-center gap-1">
-                AI Investigator
-              </Link>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {githubToken ? (
-            <>
-              <button 
-                onClick={() => setIsHistoryOpen(true)}
-                className="flex items-center gap-2 text-body hover:text-primary transition-colors text-button"
-              >
-                <Clock size={16} />
-                History
-              </button>
-              {githubUser && (
-                <Link
-                  to={`https://github.com/${githubUser.login}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={githubUser.name || githubUser.login}
-                  className="flex items-center gap-2 pl-4 ml-4 border-l border-hairline-on-dark text-body hover:text-primary transition-colors"
-                >
-                  <img
-                    src={githubUser.avatar_url}
-                    alt={githubUser.login}
-                    className="w-6 h-6 rounded-full bg-surface-elevated-dark object-cover"
-                    onError={(e) => { e.currentTarget.style.display = 'none' }}
-                  />
-                  <span className="text-button">{githubUser.login}</span>
-                </Link>
-              )}
-              <button 
-                onClick={() => handleSetToken('')}
-                className="text-body hover:text-primary transition-colors text-button ml-4 flex items-center gap-1.5"
-              >
-                <SignOut size={15} />
-                Sign Out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link to="/" className="text-body hover:text-primary transition-colors text-button hidden md:block">
-                Log In
-              </Link>
-              <Link to="/" className="h-10 px-4 flex items-center rounded-md font-button text-on-primary bg-primary hover:bg-primary-active transition-colors">
-                Sign Up
-              </Link>
-            </>
-          )}
-        </div>
-      </nav>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
-        <Routes>
-          <Route 
-            path="/" 
-            element={githubToken ? <Navigate to="/dashboard" /> : <Login setToken={handleSetToken} />} 
-          />
-          <Route 
-            path="/dashboard" 
-            element={githubToken ? <Dashboard githubToken={githubToken} /> : <Navigate to="/" />} 
-          />
-          <Route 
-            path="/finding/:findingId" 
-            element={githubToken ? <FindingDetailPage /> : <Navigate to="/" />} 
-          />
-          <Route 
-            path="/investigator" 
-            element={githubToken ? <Investigator /> : <Navigate to="/" />} 
-          />
-          <Route
-            path="/ledger"
-            element={
-              githubToken ? (
-                <TrustLedger />
-              ) : (
-                <Navigate to="/" />
-              )
-            }
-          />
-        </Routes>
-      </div>
-      
-      {/* Footer */}
-      <footer className="bg-canvas-dark text-body border-t border-hairline-on-dark pt-16 pb-8 shrink-0 mt-auto">
-        <div className="max-w-[1280px] mx-auto px-6">
-          <div className="border-t border-hairline-on-dark pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-caption text-muted-strong">
-              © 2026 AtomChain. Local Open Source Edition.
-            </p>
+    <div className="app-shell min-h-screen text-body font-sans">
+      <aside className="app-sidebar group fixed inset-y-3 left-3 z-50 flex w-[68px] flex-col rounded-[22px] border border-white/[0.08] bg-[#0e0e0e]/90 px-2 py-3 shadow-2xl backdrop-blur-xl transition-[width] duration-300 hover:w-[238px]">
+        <NavLink to="/dashboard" className="nav-brand flex h-12 items-center gap-3 rounded-xl px-2 text-on-dark" title="AtomChain">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-ink shadow-[0_0_24px_rgba(255,145,38,.3)]"><Atom size={20} weight="bold" /></span>
+          <span className="sidebar-label whitespace-nowrap text-[15px] font-bold tracking-[0.08em]">ATOMCHAIN</span>
+        </NavLink>
+        <div className="my-4 h-px bg-white/[0.07]" />
+        <nav className="space-y-1">
+          {navItems.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to} title={label} className={({ isActive }) => `sidebar-link ${isActive ? "sidebar-link-active" : ""}`}>
+              <Icon size={21} weight={to === "/dashboard" ? "fill" : "regular"} /><span className="sidebar-label whitespace-nowrap">{label}</span>
+            </NavLink>
+          ))}
+        </nav>
+        <div className="mt-auto space-y-1">
+          <button title="Settings" className="sidebar-link w-full text-left"><GearSix size={21} /><span className="sidebar-label whitespace-nowrap">Settings</span></button>
+          <div className="my-2 h-px bg-white/[0.07]" />
+          <div title={githubUser?.name || githubUser?.login || "Profile"} className="sidebar-link cursor-default">
+            {githubUser?.avatar_url ? <img src={githubUser.avatar_url} className="h-6 w-6 shrink-0 rounded-full object-cover" alt="" /> : <UserCircle size={24} />}
+            <span className="sidebar-label min-w-0 flex-1 truncate whitespace-nowrap">{githubUser?.login || "My profile"}</span>
           </div>
+          <button onClick={() => handleSetToken("")} title="Sign out" className="sidebar-link w-full text-left text-muted hover:!text-trading-down"><SignOut size={20} /><span className="sidebar-label whitespace-nowrap">Sign out</span></button>
         </div>
-      </footer>
-
-      <HistoryPanel 
-        isOpen={isHistoryOpen} 
-        onClose={() => setIsHistoryOpen(false)} 
-        onRescan={handleRescan}
-        onViewCached={handleViewCached}
-      />
+      </aside>
+      <main className="min-h-screen pl-[92px] pr-4 md:pr-6">
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" />} />
+          <Route path="/dashboard" element={<Dashboard githubToken={githubToken} />} />
+          <Route path="/finding/:findingId" element={<FindingDetailPage />} />
+          <Route path="/investigator" element={<Investigator />} />
+          <Route path="/ledger" element={<TrustLedger />} />
+          <Route path="*" element={<Navigate to="/dashboard" />} />
+        </Routes>
+      </main>
     </div>
   );
 }
 
-function App() {
-  return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
-  )
-}
-
-export default App
+export default function App() { return <BrowserRouter><AppContent /></BrowserRouter>; }

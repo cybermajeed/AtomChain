@@ -13,28 +13,27 @@ import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
 import { Package, Warning, ShieldCheck, Cube } from '@phosphor-icons/react';
 
-const dagreGraph = new dagre.graphlib.Graph();
-dagreGraph.setDefaultEdgeLabel(() => ({}));
-
 const nodeWidth = 180;
 const nodeHeight = 50;
 
 const getLayoutedElements = (nodes, edges, direction = 'LR') => {
   const isHorizontal = direction === 'LR';
-  dagreGraph.setGraph({ rankdir: direction, ranksep: 100, nodesep: 30 });
+  const graph = new dagre.graphlib.Graph();
+  graph.setDefaultEdgeLabel(() => ({}));
+  graph.setGraph({ rankdir: direction, ranksep: 100, nodesep: 30 });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    graph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
 
   edges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target);
+    graph.setEdge(edge.source, edge.target);
   });
 
-  dagre.layout(dagreGraph);
+  dagre.layout(graph);
 
   const newNodes = nodes.map((node) => {
-    const nodeWithPosition = dagreGraph.node(node.id);
+    const nodeWithPosition = graph.node(node.id);
     const newNode = {
       ...node,
       targetPosition: isHorizontal ? 'left' : 'top',
@@ -55,24 +54,30 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
 const CustomPackageNode = ({ data }) => {
   const isRoot = data.type === 'root';
   
-  let borderColor = 'border-trading-up/50';
-  let shadowColor = 'shadow-trading-up/10';
-  let bgColor = 'bg-trading-up/10';
+  let borderColor = 'border-severity-low/50';
+  let shadowColor = 'shadow-severity-low/10';
+  let bgColor = 'bg-severity-low/10';
   let Icon = ShieldCheck;
-  let textColor = 'text-trading-up';
+  let textColor = 'text-severity-low';
   
-  if (data.risk === 'CRITICAL' || data.risk === 'HIGH') {
-    borderColor = 'border-trading-down/50';
-    shadowColor = 'shadow-trading-down/10';
-    bgColor = 'bg-trading-down/10';
+  if (data.risk === 'CRITICAL') {
+    borderColor = 'border-severity-critical/50';
+    shadowColor = 'shadow-severity-critical/10';
+    bgColor = 'bg-severity-critical/10';
     Icon = Warning;
-    textColor = 'text-trading-down';
+    textColor = 'text-severity-critical';
+  } else if (data.risk === 'HIGH') {
+    borderColor = 'border-severity-high/50';
+    shadowColor = 'shadow-severity-high/10';
+    bgColor = 'bg-severity-high/10';
+    Icon = Warning;
+    textColor = 'text-severity-high';
   } else if (data.risk === 'MEDIUM' || data.risk === 'MODERATE' || isRoot) {
-    borderColor = 'border-[#FCD535]/50';
-    shadowColor = 'shadow-[#FCD535]/10';
-    bgColor = 'bg-[#FCD535]/10';
+    borderColor = 'border-severity-moderate/50';
+    shadowColor = 'shadow-severity-moderate/10';
+    bgColor = 'bg-severity-moderate/10';
     Icon = isRoot ? Cube : Package;
-    textColor = 'text-[#FCD535]';
+    textColor = 'text-severity-moderate';
   }
 
   return (
@@ -96,7 +101,15 @@ const nodeTypes = {
   customPackage: CustomPackageNode,
 };
 
-export default function DependencyGraph({ dependencies }) {
+const bucketOf = (risk) => {
+  const r = String(risk || '').toUpperCase();
+  if (r === 'CRITICAL') return 'CRITICAL';
+  if (r === 'HIGH') return 'HIGH';
+  if (r === 'MEDIUM' || r === 'MODERATE') return 'MODERATE';
+  return 'SAFE';
+};
+
+export default function DependencyGraph({ dependencies, riskFilter, reconstructKey = 0 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
@@ -166,15 +179,33 @@ export default function DependencyGraph({ dependencies }) {
       });
     });
 
+    const allowed = new Set(
+      Array.isArray(riskFilter) && riskFilter.length ? riskFilter : ['SAFE', 'MODERATE', 'HIGH', 'CRITICAL']
+    );
+    const kept = new Set();
+    initialNodes.forEach((n) => {
+      if (n.id === 'root' || allowed.has(bucketOf(n.data.risk))) kept.add(n.id);
+    });
+
+    let visibleNodes = initialNodes.filter((n) => kept.has(n.id));
+    let visibleEdges = initialEdges.filter((e) => kept.has(e.source) && kept.has(e.target));
+
+    const connected = new Set(['root']);
+    visibleEdges.forEach((e) => {
+      connected.add(e.source);
+      connected.add(e.target);
+    });
+    visibleNodes = visibleNodes.filter((n) => n.id === 'root' || connected.has(n.id));
+
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-      initialNodes,
-      initialEdges,
+      visibleNodes,
+      visibleEdges,
       'LR'
     );
 
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
-  }, [dependencies, setNodes, setEdges]);
+  }, [dependencies, riskFilter, reconstructKey, setNodes, setEdges]);
 
   return (
     <div className="relative w-full h-[600px] bg-canvas-dark rounded-xl border border-hairline-on-dark overflow-hidden">
@@ -204,9 +235,10 @@ export default function DependencyGraph({ dependencies }) {
 
       {/* Legend */}
       <div className="absolute bottom-4 left-4 z-20 flex gap-4 text-xs text-muted-strong bg-surface-elevated-dark p-3 rounded-lg border border-hairline-on-dark shadow-xl">
-         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-trading-up"></div> Safe</div>
-         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#FCD535]"></div> Medium</div>
-         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-trading-down"></div> High/Critical</div>
+         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-severity-low"></div> Low</div>
+         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-severity-moderate"></div> Moderate</div>
+         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-severity-high"></div> High</div>
+         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-severity-critical"></div> Critical</div>
       </div>
     </div>
   );

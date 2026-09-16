@@ -3,28 +3,56 @@
 @tailwind utilities;
 
 @layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 92, 0, 0.45) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.025);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(255, 92, 0, 0.35), rgba(255, 92, 0, 0.65));
+    border-radius: 9999px;
+    border: 2.5px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(255, 118, 31, 0.55), rgba(255, 92, 0, 0.9));
+    border-radius: 9999px;
+    border: 2.5px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   :root {
-    --color-primary: #fcd535;
-    --color-primary-active: #f0b90b;
-    --color-primary-disabled: #3a3a1f;
+    --color-primary: #ff5c00;
+    --color-primary-active: #ff761f;
+    --color-primary-disabled: #472214;
     
-    --color-ink: #181a20;
+    --color-ink: #0a0908;
     
-    --color-body: #eaecef;
+    --color-body: #f1f1f1;
     --color-body-on-light: #181a20;
     
-    --color-muted: #707a8a;
-    --color-muted-strong: #929aa5;
+    --color-muted: #77777a;
+    --color-muted-strong: #a2a2a6;
     
     --color-hairline-on-light: #eaecef;
-    --color-hairline-on-dark: #2b3139;
+    --color-hairline-on-dark: #343438;
     --color-border-strong: #cdd1d6;
     
     --color-canvas-light: #ffffff;
-    --color-canvas-dark: #0b0e11;
+    --color-canvas-dark: #050505;
     
-    --color-surface-card-dark: #1e2329;
-    --color-surface-elevated-dark: #2b3139;
+    --color-surface-card-dark: #101010;
+    --color-surface-elevated-dark: #181818;
     
     --color-surface-soft-light: #fafafa;
     --color-surface-strong-light: #f5f5f5;
@@ -32,9 +60,14 @@
     --color-on-primary: #181a20;
     --color-on-dark: #ffffff;
     
-    --color-trading-up: #0ecb81;
-    --color-trading-down: #f6465d;
+--color-trading-up: #0ecb81;
+    --color-trading-down: #ff4d4f;
     --color-accent-turquoise: #2dbdb6;
+
+    --color-severity-low: #22c55e;
+    --color-severity-moderate: #eab308;
+    --color-severity-high: #ef4444;
+    --color-severity-critical: #9f1239;
     
     --color-info: #3b82f6;
     --color-info-ring: #3b82f6;
@@ -50,6 +83,28 @@
     color: var(--color-body-on-light);
     background-color: var(--color-canvas-light);
   }
+}
+
+@layer components {
+  .app-shell {
+    min-height: 100vh;
+    background-color: #050505;
+    background-image: radial-gradient(circle at 50% 38%, rgba(255, 92, 0, .055), transparent 32%), radial-gradient(rgba(255, 92, 0, .34) 1px, transparent 1px);
+    background-size: auto, 50px 50px;
+  }
+  .sidebar-label { opacity: 0; transform: translateX(-6px); transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
+  .app-sidebar:hover .sidebar-label { opacity: 1; transform: translateX(0); pointer-events: auto; }
+  .app-sidebar { background: rgba(14,14,14,.92); border-color: rgba(181,181,187,.24); box-shadow: 0 16px 38px rgba(0,0,0,.38); }
+.sidebar-link { @apply flex h-11 items-center gap-3 rounded-xl px-2 text-sm text-muted transition-all duration-200 hover:bg-white/[0.055] hover:text-on-dark; }
+  .sidebar-link-active { color: #fff; background: #1a1a1a; box-shadow: inset 0 0 0 1px rgba(190,190,195,.22); }
+  .app-sidebar:not(:hover) .sidebar-link { @apply text-primary; }
+  .app-sidebar:not(:hover) .sidebar-link-active { background: rgba(255,92,0,.12); box-shadow: inset 0 0 0 1px rgba(255,92,0,.22); }
+  .sidebar-link svg { flex-shrink: 0; }
+  .bento { border-radius: 18px; border: 1px solid rgba(181,181,187,.72); background: rgba(16,16,16,.90); box-shadow: none; backdrop-filter: blur(8px); }
+  .bento-soft { @apply rounded-[16px] border border-white/[0.12] bg-white/[0.025]; }
+  .orange-dot { @apply h-2 w-2 rounded-full bg-primary shadow-[0_0_12px_rgba(255,92,0,.9)]; }
+  .eyebrow { @apply text-[10px] font-semibold uppercase tracking-[.16em] text-muted; }
+  .grid-noise { background-image: none; }
 }
 
 @layer utilities {

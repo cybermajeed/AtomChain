@@ -1,8 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Pulse, Globe, Lightning, ArrowRight, Warning, Folder, Archive, CaretDown, GitBranch } from '@phosphor-icons/react'
+import { Pulse, Globe, ArrowRight, Warning, Folder, CaretDown, GitBranch, FileArchive } from '@phosphor-icons/react'
 import FindingDetailPanel from '../components/FindingDetailPanel'
-import AIScanSummary from '../components/AIScanSummary'
+import BorderBeam from '../components/ui/border-beam-search'
+import ActionSearchBar from '../components/ui/action-search-bar'
+
+function useDebounce(value, delay = 200) {
+  const [debouncedValue, setDebouncedValue] = useState(value)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+
+  return debouncedValue
+}
 
 // Every dependency manifest the scanner understands (mirrors backend/parsers/manifest_parser.py)
 const MANIFEST_EXACT = [
@@ -17,6 +29,14 @@ const MANIFEST_EXACT = [
   'composer.json', 'composer.lock', 'pom.xml', 'packages.config',
   'environment.yml', 'environment.yaml',
 ]
+
+const severityText = (sev) => {
+  const s = (sev || '').toUpperCase()
+  if (s === 'CRITICAL') return 'text-severity-critical'
+  if (s === 'HIGH') return 'text-severity-high'
+  if (s === 'MEDIUM' || s === 'MODERATE') return 'text-severity-moderate'
+  return 'text-severity-low'
+}
 
 const isManifestFile = (name) => {
   const base = (name || '').toLowerCase()
@@ -48,16 +68,27 @@ export default function Dashboard({ githubToken }) {
   const folderInputRef = useRef(null)
   const zipInputRef = useRef(null)
   const repoDropdownRef = useRef(null)
+  const localMenuRef = useRef(null)
   const [isRepoDropdownOpen, setIsRepoDropdownOpen] = useState(false)
+  const [isLocalMenuOpen, setIsLocalMenuOpen] = useState(false)
   const [userRepos, setUserRepos] = useState(null)
   const [reposLoading, setReposLoading] = useState(false)
   const [reposError, setReposError] = useState('')
+  const [history, setHistory] = useState([])
+  const [showOnlyVulnerable, setShowOnlyVulnerable] = useState(false)
 
   useEffect(() => {
     if (scanResult) {
       localStorage.setItem('cached_scan_result', JSON.stringify(scanResult))
     }
   }, [scanResult])
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8000/api/scans')
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => setHistory(Array.isArray(data) ? data : []))
+      .catch(() => setHistory([]))
+  }, [])
 
   // Handle History panel actions
   useEffect(() => {
@@ -113,7 +144,13 @@ export default function Dashboard({ githubToken }) {
     }
   }, [])
 
-  const handleFolderClick = async () => {
+  const handleFolderClick = (e) => {
+    e.stopPropagation();
+    setIsLocalMenuOpen((o) => !o);
+  }
+
+  const handleChooseFolder = async () => {
+    setIsLocalMenuOpen(false);
     if (window.electronAPI?.selectDirectory) {
       const dir = await window.electronAPI.selectDirectory();
       if (dir) {
@@ -123,6 +160,13 @@ export default function Dashboard({ githubToken }) {
     }
     if (folderInputRef.current) {
       folderInputRef.current.click();
+    }
+  }
+
+  const handleChooseZip = () => {
+    setIsLocalMenuOpen(false);
+    if (zipInputRef.current) {
+      zipInputRef.current.click();
     }
   }
 
@@ -316,18 +360,13 @@ export default function Dashboard({ githubToken }) {
     }
   }
 
-  const toggleRepoDropdown = async () => {
-    if (isRepoDropdownOpen) {
-      setIsRepoDropdownOpen(false)
-      return
-    }
+  const openRepoDropdown = async () => {
+    setReposError('')
     if (userRepos) {
-      setReposError('')
       setIsRepoDropdownOpen(true)
       return
     }
     setReposLoading(true)
-    setReposError('')
     try {
       const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner', {
         headers: {
@@ -351,10 +390,32 @@ export default function Dashboard({ githubToken }) {
     }
   }
 
+  const toggleRepoDropdown = () => {
+    if (isRepoDropdownOpen) setIsRepoDropdownOpen(false)
+    else openRepoDropdown()
+  }
+
   const selectRepo = (repo) => {
     setRepoUrl(`https://github.com/${repo.full_name}`)
     setIsRepoDropdownOpen(false)
   }
+
+  const debouncedRepoUrl = useDebounce(repoUrl, 200)
+
+  const repoActions = (userRepos || [])
+    .slice()
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .filter((repo) => {
+      const q = debouncedRepoUrl.toLowerCase().trim()
+      return !q || repo.full_name.toLowerCase().includes(q)
+    })
+    .map((repo) => ({
+      id: repo.id,
+      label: repo.full_name,
+      description: repo.description || repo.language || 'Repository',
+      end: repo.language || 'Repo',
+      icon: <GitBranch size={16} />,
+    }))
 
   useEffect(() => {
     if (!isRepoDropdownOpen) return;
@@ -366,6 +427,17 @@ export default function Dashboard({ githubToken }) {
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [isRepoDropdownOpen])
+
+  useEffect(() => {
+    if (!isLocalMenuOpen) return;
+    const onDocClick = (e) => {
+      if (localMenuRef.current && !localMenuRef.current.contains(e.target)) {
+        setIsLocalMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [isLocalMenuOpen])
 
   // Realistic incremental progress while scanning is active
   useEffect(() => {
@@ -454,160 +526,28 @@ export default function Dashboard({ githubToken }) {
 
   return (
     <>
-      {/* Hero Band */}
-      <section className="bg-canvas-dark py-section px-6 border-b border-hairline-on-dark text-center relative">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-full opacity-5 pointer-events-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary via-canvas-dark to-canvas-dark"></div>
-        
-        <div className="max-w-4xl mx-auto relative z-10">
-          <h1 className="text-hero-display text-on-dark mb-4 uppercase tracking-tighter">
-            SECURE YOUR <span className="text-primary">SUPPLY CHAIN</span>
-          </h1>
-          <p className="text-title-lg text-body max-w-2xl mx-auto mb-12 font-normal">
-            Deep repository intelligence backed by cryptographic trust and AI analysis.
-          </p>
-          
-          {/* Search Input on Dark */}
-          <div className="max-w-2xl mx-auto flex items-center bg-surface-card-dark rounded-lg p-2 border border-hairline-on-dark shadow-2xl relative">
-            <div className="pl-4 pr-2 text-muted-strong">
-              <Globe size={20} />
-            </div>
-            <input 
-              id="repo-input"
-              type="text" 
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              placeholder="Enter GitHub Repository URL (e.g. facebook/react)"
-              className="flex-1 bg-transparent text-body-md text-on-dark placeholder-muted-strong outline-none px-2 py-2"
-              onKeyDown={(e) => e.key === 'Enter' && repoUrl && handleScan()}
-            />
-            <div ref={repoDropdownRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={toggleRepoDropdown}
-                disabled={isScanning}
-                title="My Repositories"
-                className="p-2 text-muted-strong hover:text-primary transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <CaretDown size={18} className={`transition-transform duration-200 ${isRepoDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isRepoDropdownOpen && (
-                <div className="absolute right-0 top-full mt-2 w-[26rem] max-w-[calc(100vw-4rem)] bg-surface-card-dark border border-hairline-on-dark rounded-lg shadow-2xl z-50 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-hairline-on-dark flex items-center justify-between">
-                    <span className="text-body-sm font-medium text-on-dark">My Repositories</span>
-                    {userRepos && !reposLoading && (
-                      <span className="text-caption text-muted">{userRepos.length}</span>
-                    )}
-                  </div>
-                  <div className="max-h-72 overflow-y-auto">
-                    {reposLoading && (
-                      <div className="px-4 py-3 text-body-sm text-muted flex items-center gap-2">
-                        <Pulse size={16} className="animate-pulse" /> Loading repositories...
-                      </div>
-                    )}
-                    {reposError && (
-                      <div className="px-4 py-3 text-body-sm text-trading-down">{reposError}</div>
-                    )}
-                    {userRepos && userRepos.length === 0 && !reposLoading && !reposError && (
-                      <div className="px-4 py-3 text-body-sm text-muted">
-                        No repositories found.
-                      </div>
-                    )}
-                    {userRepos && userRepos.length > 0 && userRepos.map((repo) => (
-                      <button
-                        key={repo.id}
-                        type="button"
-                        onClick={() => selectRepo(repo)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-surface-elevated-dark transition-colors flex items-center gap-3 border-b border-hairline-on-dark/40 last:border-0 cursor-pointer"
-                      >
-                        <div className="w-7 h-7 rounded-md bg-surface-elevated-dark flex items-center justify-center text-muted shrink-0">
-                          <GitBranch size={14} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-body-sm text-on-dark truncate font-medium">{repo.full_name}</div>
-                          {repo.description && (
-                            <div className="text-caption text-muted truncate">{repo.description}</div>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <span className="text-caption text-muted">{repo.language || '—'}</span>
-                          <span className={`text-caption ${repo.private ? 'text-muted-strong' : 'text-trading-up'}`}>
-                            {repo.private ? 'Private' : 'Public'}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <button 
-              onClick={handleScan}
-              disabled={isScanning || !repoUrl}
-              className="ml-2 h-10 px-8 rounded-pill font-button text-on-primary bg-primary hover:bg-primary-active disabled:bg-primary-disabled disabled:text-muted transition-colors flex items-center gap-2 whitespace-nowrap"
-            >
-              {isScanning ? (
-                <>
-                  <Pulse size={16} className="animate-pulse" /> Scanning...
-                </>
-              ) : (
-                <>
-                  <Lightning size={16} /> Scan Now
-                </>
-              )}
-            </button>
+      <section className="mx-auto w-full max-w-[1500px] pt-8 md:pt-12">
+<div ref={repoDropdownRef} className="relative mx-auto max-w-3xl overflow-visible">
+          <BorderBeam size="line" colorVariant="sunset" theme="dark" strength={0.6} duration={3.1} borderRadius={22} className="block" style={{ overflow: 'visible' }}>
+          <div className="flex h-[46px] items-center gap-2 rounded-[22px] bg-[#1d1d1d] px-3 ring-1 ring-white/[0.12] shadow-[inset_0_0_50px_rgba(255,255,255,.02)]">
+            <Globe size={20} className="shrink-0 text-primary" /><input id="repo-input" type="text" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} onFocus={openRepoDropdown} placeholder="Enter GitHub repository" className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-[#8b8b8b]" onKeyDown={(e) => { if (e.key === 'Enter' && repoUrl) handleScan(); if (e.key === 'Escape') setIsRepoDropdownOpen(false) }} />
+            <div><button type="button" onClick={toggleRepoDropdown} disabled={isScanning} title="Your repositories" className="grid h-8 w-8 place-items-center rounded-lg text-muted transition-colors hover:bg-white/[.05] hover:text-primary"><CaretDown size={18} className={isRepoDropdownOpen ? 'rotate-180' : ''} /></button></div>
+            <div ref={localMenuRef} className="relative"><button onClick={handleFolderClick} disabled={isScanning} title="Select a local file, folder or zip" className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-white/[.05] hover:text-primary disabled:opacity-40"><Folder size={19} /></button>{isLocalMenuOpen && <div className="absolute right-0 top-[calc(100%+10px)] z-[9999] w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#1c1815] shadow-2xl"><div className="border-b border-white/[.07] px-4 py-3 text-xs font-semibold text-on-dark">Import local project</div><button type="button" onClick={handleChooseFolder} className="flex w-full items-center gap-3 border-b border-white/[.05] px-4 py-3 text-left hover:bg-white/[.04]"><Folder size={16} className="text-primary" /><span className="min-w-0 flex-1 truncate text-sm text-on-dark">Upload folder</span></button><button type="button" onClick={handleChooseZip} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[.04]"><FileArchive size={16} className="text-primary" /><span className="min-w-0 flex-1 truncate text-sm text-on-dark">Upload ZIP file</span></button></div>}</div>
           </div>
+          </BorderBeam>
 
-          {/* Local Scan Option */}
-          <div className="max-w-2xl mx-auto mt-4 pt-4 border-t border-hairline-on-dark/40 flex items-center bg-surface-dark rounded-lg p-2 border shadow-inner">
-            <input 
-              type="file"
-              ref={folderInputRef}
-              webkitdirectory=""
-              directory=""
-              className="hidden"
-              onChange={handleFolderChange}
-            />
-            <input 
-              type="file"
-              ref={zipInputRef}
-              accept=".zip"
-              className="hidden"
-              onChange={handleZipChange}
-            />
-            <button 
-              className="pl-3 pr-2 text-muted-strong hover:text-primary transition-colors cursor-pointer"
-              onClick={handleFolderClick}
-              title="Select Folder"
-              type="button"
-            >
-              <Folder size={18} />
-            </button>
-            <button 
-              className="pr-2 text-muted-strong hover:text-primary transition-colors cursor-pointer"
-              onClick={() => zipInputRef.current?.click()}
-              title="Upload ZIP Archive"
-              type="button"
-            >
-              <Archive size={18} />
-            </button>
-            <input 
-              type="text" 
-              value={localPath}
-              onChange={(e) => setLocalPath(e.target.value)}
-              placeholder="Or scan local directory path / .zip file"
-              className="flex-1 bg-transparent text-body-sm text-on-dark placeholder-muted-strong outline-none px-2 py-1.5"
-              onKeyDown={(e) => e.key === 'Enter' && localPath && handleLocalScan()}
-            />
-            <button 
-              onClick={handleLocalScan}
-              disabled={isScanning || !localPath}
-              className="ml-2 h-8 px-6 rounded-md font-button text-xs text-on-dark bg-surface-elevated-dark hover:bg-surface-card-dark disabled:bg-surface-dark disabled:text-muted border border-hairline-on-dark transition-colors whitespace-nowrap"
-            >
-              Scan Local
-            </button>
-          </div>
+          <ActionSearchBar
+            open={isRepoDropdownOpen}
+            actions={repoActions}
+            loading={reposLoading}
+            error={reposError}
+            onSelect={(action) => selectRepo({ id: action.id, full_name: action.label })}
+            className="absolute left-0 right-0 top-[calc(100%+10px)] z-[9999]"
+          />
+
+          <input type="file" ref={folderInputRef} webkitdirectory="" directory="" className="hidden" onChange={handleFolderChange} /><input type="file" ref={zipInputRef} accept=".zip" className="hidden" onChange={handleZipChange} />
         </div>
+        {!scanResult && !isScanning && <div className="mx-auto mt-12 max-w-3xl"><h2 className="mb-3 text-sm font-semibold text-on-dark">History</h2><div className="max-h-[calc(100vh-270px)] overflow-y-auto rounded-[18px] border border-white/[.08] bg-surface-card-dark/60 p-1">{history.length ? history.map((scan) => <button key={scan.id} onClick={() => scan.status === 'COMPLETED' && setPollingId(scan.id)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 rounded-[13px] px-4 py-3 text-left hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${scan.status === 'COMPLETED' ? 'bg-trading-up' : scan.status === 'FAILED' ? 'bg-trading-down' : 'bg-primary'}`} /><span className="min-w-0"><span className="block truncate text-sm text-on-dark">{(scan.repository_url || 'Local analysis').replace(/^(zip|local|folder):\/\//, '')}</span><span className="mt-0.5 block text-xs text-muted">{new Date(scan.timestamp).toLocaleString()}</span></span><span className="text-xs text-muted">{scan.score ?? '—'}%</span></button>) : <div className="flex min-h-40 items-center justify-center rounded-[14px] border border-dashed border-white/[.08] text-sm text-muted">Previously analyzed repositories and local projects will appear here.</div>}</div></div>}
       </section>
 
       {/* Results Section */}
@@ -689,42 +629,29 @@ export default function Dashboard({ githubToken }) {
               <p className="text-body-md text-muted">{scanResult.error}</p>
             </div>
           ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  { label: 'Context risk', value: scanResult.score ?? 0, color: severityText(scanResult.level) },
+                  { label: 'Project health', value: Math.max(0, 100 - (scanResult.score ?? 0)), color: 'text-trading-up' },
+                  { label: 'Signal confidence', value: scanResult.confidence ?? 86, color: 'text-body' },
+                ].map((metric) => <div key={metric.label} className="bento flex items-center gap-5 p-5"><div className={`grid h-20 w-20 place-items-center rounded-full border-4 border-current bg-black/10 text-xl font-bold ${metric.color}`}>{metric.value}</div><div><p className="eyebrow">{metric.label}</p><p className="mt-1 text-xs text-muted">{metric.label === 'Context risk' ? (scanResult.level || 'Assessing') : metric.label === 'Project health' ? 'Dependency posture' : 'Evidence quality'}</p></div></div>)}
+              </div>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
-              {/* Left Column: Risk Score + AI Summary */}
-              <div className="lg:col-span-4 space-y-0">
-                <div className="bg-surface-card-dark rounded-xl p-6 border border-hairline-on-dark flex flex-col items-center justify-center min-h-[300px]">
-                  <h3 className="text-title-md text-on-dark w-full text-left mb-auto">Contextual Risk Score</h3>
-                  <div className="relative mt-8 mb-6">
-                    {/* Circular progress */}
-                    <svg className="w-48 h-48 transform -rotate-90">
-                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-surface-elevated-dark" />
-                      <circle cx="96" cy="96" r="88" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray="552" strokeDashoffset={552 - (552 * scanResult.score) / 100} className="text-primary drop-shadow-md" />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-hero-display font-plex text-on-dark leading-none mb-1">{scanResult.score}</span>
-                      <span className="text-title-sm text-muted uppercase tracking-wide">/ 100</span>
-                    </div>
-                  </div>
-                  <div className="bg-surface-elevated-dark px-4 py-2 rounded-lg mt-auto w-full flex justify-between items-center">
-                    <span className="text-body-sm text-muted">Overall Risk Level</span>
-                    <span className={`text-title-sm uppercase tracking-widest ${scanResult.level === 'LOW' ? 'text-trading-up' : (scanResult.level === 'MEDIUM' || scanResult.level === 'MODERATE') ? 'text-primary' : 'text-trading-down'}`}>
-                      {scanResult.level}
-                    </span>
-                  </div>
-                </div>
-
-                {/* AI Summary Card — sits directly below the risk score */}
-                <AIScanSummary scanId={scanResult.scan_id} />
+              <div className="bento lg:col-span-4 p-5">
+                <div className="mb-5 flex items-center justify-between"><div><p className="eyebrow mb-1">Project structure</p><h3 className="text-sm font-semibold text-on-dark">{repoUrl || localPath || 'Analyzed project'}</h3></div><Folder size={18} className="text-primary" /></div>
+                <div className="space-y-1 text-sm"><div className="rounded-lg px-3 py-2 text-body">⌄ &nbsp; root</div><div className="rounded-lg px-3 py-2 pl-8 text-muted">├─ package manifests</div><div className="rounded-lg px-3 py-2 pl-8 text-muted">├─ dependencies</div><div className="rounded-lg px-3 py-2 pl-8 text-muted">└─ lockfiles</div></div>
+                <button onClick={() => setShowOnlyVulnerable(v => !v)} className={`mt-5 w-full rounded-lg border py-2.5 text-xs transition-colors ${showOnlyVulnerable ? 'border-primary bg-primary/15 text-primary' : 'border-white/[.08] text-body hover:border-primary/40 hover:text-primary'}`}>{showOnlyVulnerable ? 'Showing vulnerable files' : 'Show vulnerable files only'}</button>
               </div>
 
               {/* Right Column: Dependency Vulnerabilities Table */}
-              <div className="lg:col-span-8 bg-surface-card-dark rounded-xl p-6 border border-hairline-on-dark">
+              <div className="bento lg:col-span-8 p-5">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-title-md text-on-dark">Dependency Vulnerabilities</h3>
                   <div className="flex gap-4 border-b border-hairline-on-dark">
                     <button className="text-body-sm font-medium text-primary border-b-2 border-primary pb-2 px-1">
-                      All Findings ({scanResult.dependencies?.length || 0})
+                      {showOnlyVulnerable ? 'Vulnerable Findings' : 'All Findings'} ({showOnlyVulnerable ? (scanResult.dependencies || []).filter((d) => !['LOW', 'UNKNOWN'].includes((d.risk || '').toUpperCase())).length : scanResult.dependencies?.length || 0})
                     </button>
                   </div>
                 </div>
@@ -739,8 +666,8 @@ export default function Dashboard({ githubToken }) {
 
                 {/* Table Rows */}
                 <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
-                  {scanResult.dependencies && scanResult.dependencies.length > 0 ? (
-                    scanResult.dependencies.map((dep, i) => (
+                  {scanResult.dependencies && (showOnlyVulnerable ? scanResult.dependencies.filter((d) => !['LOW', 'UNKNOWN'].includes((d.risk || '').toUpperCase())) : scanResult.dependencies).length > 0 ? (
+                    (showOnlyVulnerable ? scanResult.dependencies.filter((d) => !['LOW', 'UNKNOWN'].includes((d.risk || '').toUpperCase())) : scanResult.dependencies).map((dep, i) => (
                       <div
                         key={i}
                         onClick={() => navigate(`/finding/${dep.finding_id || dep.id}`, { state: { finding: dep, dependencies: scanResult?.dependencies } })}
@@ -751,12 +678,14 @@ export default function Dashboard({ githubToken }) {
                           <span className="text-number-md text-on-dark truncate" title={dep.id}>{dep.id}</span>
                         </div>
                         <div className="col-span-3 text-right font-plex text-number-md">
-                          {['CRITICAL', 'HIGH'].includes(dep.risk) ? (
-                            <span className="text-trading-down">{dep.risk}</span>
+                          {dep.risk === 'CRITICAL' ? (
+                            <span className="text-severity-critical">{dep.risk}</span>
+                          ) : dep.risk === 'HIGH' ? (
+                            <span className="text-severity-high">{dep.risk}</span>
                           ) : (dep.risk === 'MEDIUM' || dep.risk === 'MODERATE') ? (
-                            <span className="text-primary font-medium">{dep.risk}</span>
+                            <span className="text-severity-moderate font-medium">{dep.risk}</span>
                           ) : (
-                            <span className="text-trading-up">{dep.risk}</span>
+                            <span className="text-severity-low">{dep.risk}</span>
                           )}
                         </div>
                         <div className="col-span-3 text-right text-body-sm text-body">
@@ -771,13 +700,13 @@ export default function Dashboard({ githubToken }) {
                     ))
                   ) : (
                     <div className="py-8 text-center text-muted">
-                      No vulnerabilities found! Your dependencies are secure.
+                      {showOnlyVulnerable ? 'No medium, high or critical vulnerabilities found.' : 'No vulnerabilities found! Your dependencies are secure.'}
                     </div>
                   )}
                 </div>
               </div>
               
-            </div>
+            </div></div>
           )}
         </section>
       )}

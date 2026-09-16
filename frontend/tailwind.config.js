@@ -46,6 +46,12 @@ export default {
           up: 'var(--color-trading-up)',
           down: 'var(--color-trading-down)',
         },
+        severity: {
+          low: 'var(--color-severity-low)',
+          moderate: 'var(--color-severity-moderate)',
+          high: 'var(--color-severity-high)',
+          critical: 'var(--color-severity-critical)',
+        },
         accent: {
           turquoise: 'var(--color-accent-turquoise)',
         },
