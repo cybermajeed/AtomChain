@@ -733,22 +733,40 @@ export default function FindingDetailPage() {
                   ? { ...d, is_reviewed: true, decision: tag }
                   : d,
               );
-              
+
               const activeDeps = updatedDeps.filter(
-                (d) => !(d.is_reviewed && (d.decision === "ACCEPT" || d.decision === "REJECT"))
+                (d) =>
+                  !(
+                    d.is_reviewed &&
+                    (d.decision === "ACCEPT" || d.decision === "REJECT")
+                  ),
               );
               let maxRiskScore = 0;
               let newLevel = "LOW";
-              if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "CRITICAL")) {
+              if (
+                activeDeps.some(
+                  (d) => (d.risk || "").toUpperCase() === "CRITICAL",
+                )
+              ) {
                 maxRiskScore = 95;
                 newLevel = "CRITICAL";
-              } else if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "HIGH")) {
+              } else if (
+                activeDeps.some((d) => (d.risk || "").toUpperCase() === "HIGH")
+              ) {
                 maxRiskScore = 80;
                 newLevel = "HIGH";
-              } else if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "MEDIUM" || (d.risk || "").toUpperCase() === "MODERATE")) {
+              } else if (
+                activeDeps.some(
+                  (d) =>
+                    (d.risk || "").toUpperCase() === "MEDIUM" ||
+                    (d.risk || "").toUpperCase() === "MODERATE",
+                )
+              ) {
                 maxRiskScore = 50;
                 newLevel = "MEDIUM";
-              } else if (activeDeps.some((d) => (d.risk || "").toUpperCase() === "LOW")) {
+              } else if (
+                activeDeps.some((d) => (d.risk || "").toUpperCase() === "LOW")
+              ) {
                 maxRiskScore = 20;
                 newLevel = "LOW";
               } else {
@@ -758,7 +776,12 @@ export default function FindingDetailPage() {
 
               localStorage.setItem(
                 "cached_scan_result",
-                JSON.stringify({ ...parsed, dependencies: updatedDeps, score: maxRiskScore, level: newLevel }),
+                JSON.stringify({
+                  ...parsed,
+                  dependencies: updatedDeps,
+                  score: maxRiskScore,
+                  level: newLevel,
+                }),
               );
             }
           }
@@ -1006,6 +1029,27 @@ export default function FindingDetailPage() {
                   Override
                 </button>
               </div>
+            )}
+            {finding.vulnerability_id || finding.cve ? (
+              <a
+                href={`https://osv.dev/vulnerability/${finding.vulnerability_id || finding.cve}`}
+                target="_blank"
+                rel="noreferrer"
+                className="h-10 px-4 rounded-pill border border-white/20 text-on-dark font-button hover:bg-white/10 transition-colors flex items-center gap-2"
+              >
+                View on OSV
+                <ArrowSquareOut size={16} className="opacity-70" />
+              </a>
+            ) : (
+              <a
+                href={`https://osv.dev/list?ecosystem=${finding.ecosystem}&q=${finding.package_name}`}
+                target="_blank"
+                rel="noreferrer"
+                className="h-10 px-4 rounded-pill border border-white/20 text-on-dark font-button hover:bg-white/10 transition-colors flex items-center gap-2"
+              >
+                Search OSV
+                <ArrowSquareOut size={16} className="opacity-70" />
+              </a>
             )}
             <button
               onClick={() => runAnalysis("vulnerability")}

@@ -89,6 +89,8 @@ class DependencyResult(BaseModel):
     risk: str
     direct: bool
     ecosystem: str = "npm"
+    vulnerability_id: Optional[str] = None
+    cve: Optional[str] = None
 
 class ScanDetail(BaseModel):
     scan_id: int
@@ -201,6 +203,8 @@ def get_scan_status(scan_id: int, db: Session = Depends(get_db)):
                 risk=f.severity,
                 direct=f.finding_type == "DIRECT_VULNERABILITY",
                 ecosystem=f.ecosystem or "npm",
+                vulnerability_id=f.vulnerability_id,
+                cve=f.cve,
             )
             for f in findings
         ]
@@ -234,6 +238,8 @@ def get_finding_detail(finding_id: int, db: Session = Depends(get_db)):
                 "risk": f.severity,
                 "direct": f.finding_type == "DIRECT_VULNERABILITY",
                 "ecosystem": f.ecosystem or "npm",
+                "vulnerability_id": f.vulnerability_id,
+                "cve": f.cve,
             }
             for f in all_findings
         ]
