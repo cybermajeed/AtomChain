@@ -2,13 +2,13 @@
 
 **Last Updated:** September 15, 2026
 
-Welcome to Sustainverse ("the Application"). These Terms of Service ("Terms") govern your use of the Sustainverse local desktop application and associated local backend services.
+Welcome to AtomChain . These Terms of Service ("Terms") govern your use of the AtomChain local desktop application and associated local backend services.
 
 ## 1. Acceptance of Terms
 By downloading, installing, or using the Application, you agree to be bound by these Terms. If you do not agree to these Terms, do not use the Application.
 
 ## 2. Description of Service
-Sustainverse is a locally executed software supply chain risk and integrity platform. It operates by analyzing local or remote Git repositories (`backend/scanner/git_manager.py`), extracting dependencies (`backend/parsers/npm_parser.py`), querying third-party vulnerability databases (`backend/intelligence/osv_client.py`), and utilizing AI models for investigation (`backend/ai/investigator.py`).
+AtomChain is a locally executed software supply chain risk and integrity platform. It operates by analyzing local or remote Git repositories (`backend/scanner/git_manager.py`), extracting dependencies (`backend/parsers/npm_parser.py`), querying third-party vulnerability databases (`backend/intelligence/osv_client.py`), and utilizing AI models for investigation (`backend/ai/investigator.py`).
 
 ## 3. Account and Authentication
 The Application operates entirely locally and does not require a central user account, subscription, or billing mechanism. However, use of the AI Investigator feature requires a valid API key for Google Gemini (`backend/ai/investigator.py`). You are solely responsible for obtaining this key and for any costs incurred from its use with your AI provider.
@@ -32,7 +32,7 @@ The Application provides risk assessments and security intelligence as decision 
 **AI-Generated Content:** The AI Investigator interprets evidence and generates explanations. AI outputs may be inaccurate, incomplete, or misleading. You must independently verify all AI-generated findings before making security decisions.
 
 ## 7. Limitation of Liability
-To the maximum extent permitted by law, the developers of Sustainverse shall not be liable for any indirect, incidental, special, or consequential damages, including loss of data, arising from your use of the Application or reliance on its security assessments.
+To the maximum extent permitted by law, the developers of AtomChain shall not be liable for any indirect, incidental, special, or consequential damages, including loss of data, arising from your use of the Application or reliance on its security assessments.
 
 ## 8. Changes to Terms
 We reserve the right to modify these Terms at any time. Continued use of the Application following any changes constitutes your acceptance of the revised Terms.

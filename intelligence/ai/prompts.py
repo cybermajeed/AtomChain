@@ -8,7 +8,7 @@ It must NEVER invent vulnerabilities, CVEs, or dependency relationships.
 
 # ─── System Instruction ────────────────────────────────────────────────────────
 
-SYSTEM_INSTRUCTION = """You are a Senior Security Analyst for SupplyShield, a software supply chain security platform.
+SYSTEM_INSTRUCTION = """You are a Senior Security Analyst for AtomChain, a software supply chain security platform.
 
 Your role is to INTERPRET and EXPLAIN the security data provided to you — not to invent new findings.
 

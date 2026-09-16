@@ -15,7 +15,7 @@ class GitManager:
         """Clears any orphaned temporary repository directories."""
         temp_base = tempfile.gettempdir()
         for item in os.listdir(temp_base):
-            if item.startswith("sustainverse_"):
+            if item.startswith("atomchain_"):
                 path = os.path.join(temp_base, item)
                 if os.path.isdir(path):
                     shutil.rmtree(path, ignore_errors=True)
@@ -25,7 +25,7 @@ class GitManager:
         Downloads a GitHub repository as a tarball and extracts it into a temporary directory.
         Returns the path to the temporary directory.
         """
-        temp_dir = tempfile.mkdtemp(prefix="sustainverse_")
+        temp_dir = tempfile.mkdtemp(prefix="atomchain_")
         
         parsed = urllib.parse.urlparse(repo_url)
         if not parsed.scheme:
@@ -85,5 +85,5 @@ class GitManager:
 
     def cleanup(self, path: str):
         """Removes the temporary directory."""
-        if path and os.path.exists(path) and "sustainverse_" in path:
+        if path and os.path.exists(path) and "atomchain_" in path:
             shutil.rmtree(path, ignore_errors=True)

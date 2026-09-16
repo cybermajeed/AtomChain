@@ -8,7 +8,7 @@ class GitHubAPIClient:
         self.base_url = "https://api.github.com"
         self.headers = {
             "Accept": "application/vnd.github.v3.raw",
-            "User-Agent": "Sustainverse-Backend"
+            "User-Agent": "AtomChain-Backend"
         }
         if token:
             self.headers["Authorization"] = f"Bearer {token}"

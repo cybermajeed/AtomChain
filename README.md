@@ -2,7 +2,7 @@
 
 # ⬢ ATOMCHAIN
 
-### Sustainverse · Local-first supply-chain security, on your machine.
+### AtomChain · Local-first supply-chain security, on your machine.
 
 <img src="assets/hero-scan.svg" alt="AtomChain radar scan" width="340" />
 
@@ -150,7 +150,7 @@ npm run electron:dev                   # boots Vite + launches Electron, Python 
 ## 📁 Repository structure
 
 ```text
-sustainverse/
+atomchain/
 ├── backend/              # FastAPI server, scanners, risk + trust engines
 │   ├── scanner/          #   Git clone, GitHub API, ZIP ingestion
 │   ├── parsers/          #   npm & Python manifest parsers

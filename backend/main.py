@@ -51,7 +51,7 @@ from cache import cache
 analyst = GroqAnalyst()
 tavily = TavilyClient()
 
-app = FastAPI(title="Sustainverse API", version="1.0.0")
+app = FastAPI(title="AtomChain API", version="1.0.0")
 app.include_router(auth_router)
 
 app.add_middleware(
@@ -265,12 +265,21 @@ def get_scans(db: Session = Depends(get_db)):
     scans = db.query(Scan).order_by(Scan.id.desc()).all()
     result = []
     for s in scans:
+        score = None
+        if s.status == "COMPLETED":
+            findings = db.query(Finding).filter(Finding.scan_id == s.id).all()
+            if findings:
+                score = int(max(f.risk_score for f in findings))
+            else:
+                score = 0
+                
         result.append({
             "id": s.id,
             "repository_url": s.repository_url,
             "status": s.status,
             "timestamp": s.timestamp.isoformat(),
-            "error_message": s.error_message
+            "error_message": s.error_message,
+            "score": score
         })
     return result
 

@@ -1,6 +1,6 @@
 The **Contextual Risk Score** in AtomChain is designed to move beyond generic, isolated vulnerability ratings (like CVSS) by evaluating *how* a vulnerability specifically impacts your codebase. 
 
-It is calculated dynamically out of 100 points using three primary vectors (as implemented in [`backend/risk/engine.py`](file:///x:/hackathon/sustainverse/backend/risk/engine.py)):
+It is calculated dynamically out of 100 points using three primary vectors (as implemented in [`backend/risk/engine.py`](file:///x:/hackathon/AtomChain/backend/risk/engine.py)):
 
 ### 1. Base Severity (Up to 50 Points)
 We first check the qualitative severity reported directly by the OSV.dev database:

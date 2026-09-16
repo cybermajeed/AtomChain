@@ -116,7 +116,7 @@ export default function Investigator() {
     {
       role: 'assistant',
       content:
-        "I'm your SupplyShield Security Analyst, powered by Groq's gpt-oss-120b. " +
+        "I'm your AtomChain Security Analyst, powered by Groq's gpt-oss-120b. " +
         "I have access to your scan findings and can help you understand vulnerabilities, " +
         "prioritize remediation, and interpret the dependency risk. " +
         "Enter a scan ID above to get started, or ask me anything.",

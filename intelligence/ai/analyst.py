@@ -289,7 +289,7 @@ class GroqAnalyst:
 
         # Chat uses a more conversational system prompt
         chat_system = (
-            "You are a security analyst for SupplyShield. Answer questions about the scan results provided. "
+            "You are a security analyst for AtomChain. Answer questions about the scan results provided. "
             "Be concise, accurate, and professional. Never invent security facts. "
             "If you don't have enough context, say so clearly."
         )

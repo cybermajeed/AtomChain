@@ -2,10 +2,10 @@
 
 **Last Updated:** September 15, 2026
 
-This Privacy Policy explains how Sustainverse ("we", "our", or "us") handles information when you use our local desktop application.
+This Privacy Policy explains how AtomChain ("we", "our", or "us") handles information when you use our local desktop application.
 
 ## 1. Local-First Architecture
-Sustainverse is designed as a local-first application. All core processing, including repository cloning (`backend/scanner/git_manager.py`), dependency parsing, and risk assessment (`backend/risk/engine.py`), occurs on your local machine.
+AtomChain is designed as a local-first application. All core processing, including repository cloning (`backend/scanner/git_manager.py`), dependency parsing, and risk assessment (`backend/risk/engine.py`), occurs on your local machine.
 
 ## 2. Data We Do Not Collect
 We **do not** collect, store, or transmit to our servers:
@@ -25,10 +25,10 @@ While the Application does not send data to us, it does communicate with third-p
 Please refer to the respective privacy policies of OSV, Google, and GitHub for information on how they handle data transmitted to their APIs.
 
 ## 4. User Controls and Data Deletion
-Because all data is stored locally, you have complete control over it. You can delete all scan history, findings, and trust ledger records by deleting the `sustainverse.db` file from the application's backend directory.
+Because all data is stored locally, you have complete control over it. You can delete all scan history, findings, and trust ledger records by deleting the `atomchain.db` file from the application's backend directory.
 
 ## 5. Security
-Your API keys (e.g., Gemini API Key) are utilized locally and sent directly to the respective provider. They are not transmitted to or stored by any centralized Sustainverse server.
+Your API keys (e.g., Gemini API Key) are utilized locally and sent directly to the respective provider. They are not transmitted to or stored by any centralized AtomChain server.
 
 ## 6. Changes to This Policy
 We may update this Privacy Policy from time to time to reflect changes in our practices or the Application's features. We will notify you of any changes by updating the "Last Updated" date at the top of this policy.

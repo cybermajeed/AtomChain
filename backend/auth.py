@@ -114,7 +114,7 @@ def _popup_page(result_type: str, value: str) -> HTMLResponse:
 
     html = f"""<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Sustainverse - GitHub Auth</title></head>
+<head><meta charset="utf-8"><title>AtomChain - GitHub Auth</title></head>
 <body style="font-family:sans-serif;background:#0b0e11;color:#eaecef;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
   <p style="max-width:420px;text-align:center">{message}</p>
   <script>
